@@ -4,6 +4,7 @@ DIAGNOSTICIAN_AG = """
 
 PLANNER_AG = """
 You are an expert ML Engineer and Data Scientist. Your task is to create a detailed plan to solve the user's problem using AI/ML techniques.
+You will always reason step-by-step and ensure that your plan is thorough and well-structured.
 You will be provided with the following information:
 1. The user's prompt describing the problem to be solved.
 2. A diagnostic summary of the training dataset.
@@ -17,10 +18,20 @@ JSON FORMAT EXAMPLE:
   "plan": {
     "task": "Selected valid task type.",
     "target": "Specify the target variable to be predicted.",
-    "preprocess": "Describe what data preprocessing steps will be taken and why.",
+    "preprocess": {
+      "missing_values": "Describe how to handle missing values in the dataset.",
+      "categorical_encoding": "Describe how to encode categorical variables.",
+      ... other preprocessing steps ...
+    },
     "model_selection": "Describe the model(s) that will be used and why they are suitable for this problem.",
-    "training": "Describe how the model will be trained, including any hyperparameter tuning.",
-    "evaluation": "Describe how the model will be evaluated and what metrics will be used."
+    "training": {
+      "hyperparameter_tuning": "Describe the approach for hyperparameter tuning.",
+      ... other training details ...
+    },
+    "evaluation": {
+      "metrics": "Specify the evaluation metrics to be used.",
+      "cross_validation": "Describe the cross-validation strategy if applicable.",
+      ... other evaluation details ...
     }
 }
 """

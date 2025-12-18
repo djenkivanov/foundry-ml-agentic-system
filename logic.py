@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import pandas as pd
 import agents
 import json
-import app
+import re
 import streamlit as st
 
 load_dotenv()
@@ -48,12 +48,12 @@ def return_insight_summary(df):
 
 def create_initial_plan(user_prompt, insights, reasoning_stream=None, plan_stream=None):
     planner_prompt = build_planner_prompt(insights["training_dataset"], insights["test_dataset"])
-
+    user_prompt = "None" if not user_prompt else user_prompt
     final_response = None
     
     with client.responses.stream(
         model="o4-mini",
-        reasoning={"summary": "auto"},
+        reasoning={"summary": "detailed"},
         input=[
             {
                 "role": "system",
@@ -68,6 +68,7 @@ def create_initial_plan(user_prompt, insights, reasoning_stream=None, plan_strea
         for event in stream:
             if event.type == "response.reasoning_summary_text.delta":
                 st.session_state.reasoning_text += event.delta
+                st.session_state.reasoning_text = re.sub(r"(?<!\n)\*\*(?=\S)", "\n\n**", st.session_state.reasoning_text)
                 reasoning_stream.markdown(f"## Planner Agent Reasoning:\n\n{st.session_state.reasoning_text}")
 
             elif event.type == "response.output_text.delta":

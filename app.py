@@ -24,7 +24,7 @@ if "plan_text" not in st.session_state:
     st.session_state.plan_text = ""
 
 if st.button("Start foundry process"):
-    if training_ds is None or test_ds is None or prompt is None:
+    if training_ds is None or test_ds is None:
         st.error("Please upload both training and test datasets, and fill in the prompt.")
     else:
         st.session_state.train_df = pd.read_csv(training_ds)
