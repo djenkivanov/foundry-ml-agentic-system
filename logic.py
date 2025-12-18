@@ -4,55 +4,69 @@ import os
 from dotenv import load_dotenv
 import pandas as pd
 import agents
+import json
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_KEY"))
 
-def get_diagnostics(df):
+def get_data_insight(df):
     shape = df.shape
     
-    cols_missing_values_sum = df.isna().sum()
-    cols_missing_values = [k for k, v in cols_missing_values_sum.items() if v > 0]
+    # cols_missing_values_sum = df.isna().sum()
+    # cols_missing_values = [k for k, v in cols_missing_values_sum.items() if v > 0]
+    
+    cols_missing_values = df.isna().sum()
     
     dtypes = df.dtypes
-    description = df.describe()
+    # description = df.describe()
     unique_counts = df.nunique()
     
-    diagnostics = {
+    insights = {
         "Shape": shape,
         "Columns with missing values": cols_missing_values,
         "Data Types": dtypes,
-        "Description": description,
+        # "Description": description,
         "Unique Counts": unique_counts
     }
     
-    return diagnostics
+    return insights
     
 
-def create_initial_plan(user_prompt, train_ds_diagnostics, test_ds_diagnostics):
-    planner_prompt = build_planner_prompt(train_ds_diagnostics, test_ds_diagnostics)
+def create_initial_plan(user_prompt, train_ds_insights, test_ds_insights):
+    planner_prompt = build_planner_prompt(train_ds_insights, test_ds_insights)
+
     plan = client.responses.create(
         model="o4-mini",
-        prompt=planner_prompt,
-        input=user_prompt,
+        reasoning={"summary": "auto"},
+        input=[
+            {
+                "role": "system",
+                "content": prompts.PLANNER_AG
+            },
+            {
+                "role": "user",
+                "content": f"{planner_prompt}\nUser Prompt: {user_prompt}"
+            }
+        ]
     )
-    return plan
+    
+    return (plan.output[0], plan.output[1].content[0].text)
 
 
-def build_planner_prompt(train_ds_diagnostics, test_ds_diagnostics):
+def build_planner_prompt(train_ds_insights, test_ds_insights):
     valid_tasks = ", ".join(agents.Task.__args__)
+    pretty_train_insights = "\n".join([f"{k}:\n{v}\n\n" for k, v in train_ds_insights.items()])
+    pretty_test_insights = "\n".join([f"{k}:\n{v}\n\n" for k, v in test_ds_insights.items()])
     prompt = f"""
     {prompts.PLANNER_AG}
     
     For the task, choose one of the following valid task types: {valid_tasks}.
     
-    Training dataset diagnostics:
-    {train_ds_diagnostics}
+    Training dataset insights:
+    {pretty_train_insights}
     
-    Test dataset diagnostics:
-    {test_ds_diagnostics}
-    
-    Target column: [Specify the target column here]
+    Test dataset insights:
+    {pretty_test_insights}
     """
     return prompt
 
@@ -65,12 +79,14 @@ if __name__ == "__main__":
     # print(diag_str)
     
     df = pd.read_csv("trainWithNull.csv")
-    # print(df['Embarked'].value_counts())
+    # print(df['Cabin'].unique())
     # print(df['Embarked'].unique())
     # print(df['Embarked'].isna().sum())
-    diagnostics = get_diagnostics(df)
-    plan = create_initial_plan(
+    
+    insights = get_data_insight(df)
+    reasoning, plan = create_initial_plan(
         user_prompt="Predict survival on the Titanic dataset.",
-        train_ds_diagnostics=diagnostics,
-        test_ds_diagnostics=diagnostics
+        train_ds_insights=insights,
+        test_ds_insights=insights
     )
+    print(json.loads(plan))

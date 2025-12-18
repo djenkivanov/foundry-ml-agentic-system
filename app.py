@@ -30,7 +30,7 @@ if st.session_state.df_train is not None and st.session_state.df_test is not Non
     st.dataframe(st.session_state.df_train.head())
 
     if st.button("Run data diagnostics check"):
-        st.session_state.diagnostics = logic.get_diagnostics(st.session_state.df_train)
+        st.session_state.diagnostics = logic.get_data_insight(st.session_state.df_train)
 
 if st.session_state.diagnostics is not None:
     st.subheader("Diagnostics")
