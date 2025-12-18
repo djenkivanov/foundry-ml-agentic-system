@@ -14,13 +14,13 @@ training, evaluation, and any other relevant steps.
 Respond with a valid JSON object containing the plan with clear and concise steps.
 JSON FORMAT EXAMPLE:
 {
-  "plan": [
+  "plan": {
     "task": "Selected valid task type.",
     "target": "Specify the target variable to be predicted.",
     "preprocess": "Describe what data preprocessing steps will be taken and why.",
     "model_selection": "Describe the model(s) that will be used and why they are suitable for this problem.",
     "training": "Describe how the model will be trained, including any hyperparameter tuning.",
     "evaluation": "Describe how the model will be evaluated and what metrics will be used."
-    ]
+    }
 }
 """
