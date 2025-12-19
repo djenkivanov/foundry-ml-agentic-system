@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import logic
+import agents
+from custom_state import State
 
 st.title("Foundry ML")
 
@@ -38,6 +40,19 @@ if st.session_state.train_df is not None and st.session_state.test_df is not Non
     if st.button("Get data insights and create plan"):
         reasoning_stream = st.empty()
         plan_stream = st.empty()
-        st.session_state.insights = logic.get_data_insight(st.session_state.train_df, st.session_state.test_df)
-        st.session_state.plan = logic.create_initial_plan(st.session_state.prompt, st.session_state.insights, reasoning_stream, plan_stream)
+        status_box = st.empty()
+        
+        # init state that will be used across agents
+        state = State(
+            prompt=st.session_state.prompt,
+            train_ds=st.session_state.train_df,
+            test_ds=st.session_state.test_df,
+        )
+        
+        # infer planner agent -> get data insight and create plan
+        agents.planner_agent(state, reasoning_stream, plan_stream)
+        if state.stage == "failed":
+            status_box.error(f"Error during planning: {state.errors}")
+        if state.target and state.task:
+            status_box.success(f"Planning completed successfully! Target: {state.target}, Task: {state.task}")
         

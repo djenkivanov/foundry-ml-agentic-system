@@ -7,21 +7,22 @@ import agents
 import json
 import re
 import streamlit as st
+from custom_state import State, Task
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_KEY"))
 
-def get_data_insight(df_train, df_test):
-    df_train_insights = return_insight_summary(df_train)
-    df_test_insights = return_insight_summary(df_test)
+def get_data_insight(state: State) -> State:
+    df_train_insights = return_insight_summary(state.train_ds)
+    df_test_insights = return_insight_summary(state.test_ds)
     
     insights = {
         "training_dataset": df_train_insights,
         "test_dataset": df_test_insights
     }
     
-    return insights
-    
+    state.insights = insights
+        
 
 def return_insight_summary(df):
     shape = df.shape
@@ -46,9 +47,9 @@ def return_insight_summary(df):
     return insights
 
 
-def create_initial_plan(user_prompt, insights, reasoning_stream=None, plan_stream=None):
-    planner_prompt = build_planner_prompt(insights["training_dataset"], insights["test_dataset"])
-    user_prompt = "None" if not user_prompt else user_prompt
+def create_initial_plan(state, reasoning_stream=None, plan_stream=None):
+    planner_prompt = build_planner_prompt(state)
+    state.prompt = "None" if not state.prompt else state.prompt
     final_response = None
     
     with client.responses.stream(
@@ -61,7 +62,7 @@ def create_initial_plan(user_prompt, insights, reasoning_stream=None, plan_strea
             },
             {
                 "role": "user",
-                "content": f"{planner_prompt}\nUser Prompt: {user_prompt}"
+                "content": f"{planner_prompt}\nUser Prompt: {state.prompt}"
             }
         ],
     ) as stream:
@@ -77,13 +78,16 @@ def create_initial_plan(user_prompt, insights, reasoning_stream=None, plan_strea
     
         final_response = stream.get_final_response()
     
-    return final_response.output[1].content[0].text
+    state.plan = final_response.output[1].content[0].text
+    state.stage = "preprocess"
+    state.task = json.loads(state.plan).get("plan", [{}]).get("task", "")
+    state.target = json.loads(state.plan).get("plan", [{}]).get("target", "")
 
 
-def build_planner_prompt(train_ds_insights, test_ds_insights):
-    valid_tasks = ", ".join(agents.Task.__args__)
-    pretty_train_insights = "\n".join([f"{k}:\n{v}\n\n" for k, v in train_ds_insights.items()])
-    pretty_test_insights = "\n".join([f"{k}:\n{v}\n\n" for k, v in test_ds_insights.items()])
+def build_planner_prompt(state):
+    valid_tasks = ", ".join(Task.__args__)
+    pretty_train_insights = "\n".join([f"{k}:\n{v}\n\n" for k, v in state.insights["training_dataset"].items()])
+    pretty_test_insights = "\n".join([f"{k}:\n{v}\n\n" for k, v in state.insights["test_dataset"].items()])
     prompt = f"""
     {prompts.PLANNER_AG}
     
@@ -99,23 +103,12 @@ def build_planner_prompt(train_ds_insights, test_ds_insights):
 
 
 if __name__ == "__main__":
-    # df = pd.read_csv("DPtrain.csv")
-    # df = pd.read_csv("trainWithNull.csv")
-    # diagnostics = get_diagnostics(df)
-    # diag_str = "\n".join([f"{k}:\n{v}" for k, v in diagnostics.items()])
-    # print(diag_str)
-    
     df = pd.read_csv("trainWithNull.csv")
-    # print(df['Cabin'].unique())
-    # print(df['Embarked'].unique())
-    # print(df['Embarked'].isna().sum())
-    
-    insights = get_data_insight(df)
-    reasoning, plan = create_initial_plan(
-        user_prompt="Predict survival on the Titanic dataset.",
-        train_ds_insights=insights,
-        test_ds_insights=insights
+    state = State(
+        prompt="",
+        train_ds=df,
+        test_ds=df,
     )
-    json = "{\n  \"plan\": [\n    {\n      \"task\": \"classification\"\n    },\n    {\n      \"target\": \"Survived\"\n    },\n    {\n      \"preprocess\": \"Handle missing values and drop irrelevant columns. Impute Age by median (grouped by Title), fill Embarked with mode, extract Deck from Cabin (first letter) and fill unknown. Drop PassengerId, Ticket, Name (after feature extraction), Cabin. Log\u2010transform Fare to reduce skew.\"\n    },\n    {\n      \"feature_engineering\": \"Extract Title from Name; create FamilySize = SibSp + Parch + 1 and IsAlone flag; encode Pclass as ordinal; one\u2010hot encode Sex, Embarked, Title, Deck; scale numeric features (Age, Fare, FamilySize) with StandardScaler.\"\n    },\n    {\n      \"model_selection\": \"Benchmark Logistic Regression (baseline), Random Forest and XGBoost (for non-linear interactions). These handle mixed feature types and provide feature importance.\"\n    },\n    {\n      \"training\": \"Use stratified 5\u2010fold cross\u2010validation. Perform hyperparameter tuning via RandomizedSearchCV: regularization C for LR; n_estimators, max_depth, min_samples_split for RF; learning_rate, n_estimators, max_depth for XGB. Use early stopping on validation folds for XGB.\"\n    },\n    {\n      \"evaluation\": \"Assess performance on held-out folds and test set using accuracy, precision, recall, F1\u2010score and ROC AUC. Plot confusion matrix and ROC curve. Check calibration (calibration curve/Brier score).\"\n    },\n    {\n      \"ensemble\": \"If performance gains needed, ensemble top models via soft voting or stacking and re-evaluate metrics.\"\n    }\n  ]\n}"
-    print(json.dumps(plan, indent=2))
-    print(reasoning)
+    
+    # infer planner agent -> get data insight and create plan
+    agents.planner_agent(state)
