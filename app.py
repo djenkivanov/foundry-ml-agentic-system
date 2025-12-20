@@ -24,6 +24,14 @@ if "reasoning_text" not in st.session_state:
     st.session_state.reasoning_text = ""
 if "plan_text" not in st.session_state:
     st.session_state.plan_text = ""
+if "plan_done" not in st.session_state:
+    st.session_state.plan_done = False
+if "preprocess_done" not in st.session_state:
+    st.session_state.preprocess_done = False
+if "preprocessing_started" not in st.session_state:
+    st.session_state.preprocessing_started = False
+if "streaming_in_progress" not in st.session_state:
+    st.session_state.streaming_in_progress = False
 
 if st.button("Start foundry process"):
     if training_ds is None or test_ds is None:
@@ -38,6 +46,10 @@ if st.session_state.train_df is not None and st.session_state.test_df is not Non
     st.dataframe(st.session_state.train_df.head())
 
     if st.button("Get data insights and create plan"):
+        st.session_state.streaming_in_progress = True
+        st.rerun()
+    
+    if st.session_state.streaming_in_progress:
         reasoning_stream = st.empty()
         plan_stream = st.empty()
         status_box = st.empty()
@@ -51,8 +63,40 @@ if st.session_state.train_df is not None and st.session_state.test_df is not Non
         
         # infer planner agent -> get data insight and create plan
         agents.planner_agent(state, reasoning_stream, plan_stream)
+
         if state.stage == "failed":
             status_box.error(f"Error during planning: {state.errors}")
-        if state.target and state.task:
-            status_box.success(f"Planning completed successfully! Target: {state.target}, Task: {state.task}")
+        else:
+            status_box.success(f"Planning completed successfully!")
+            st.session_state.plan_done = True
         
+        st.session_state.streaming_in_progress = False
+        reasoning_stream.empty()
+        plan_stream.empty()
+        st.rerun()
+
+if st.session_state.plan_done:
+    if st.session_state.reasoning_text:
+        st.markdown(
+            "## Planner Agent Reasoning\n\n"
+            f"{st.session_state.reasoning_text}"
+        )
+
+    if st.session_state.plan_text:
+        st.markdown(
+            "## Planner Agent Plan\n\n"
+            f"```json\n{st.session_state.plan_text}\n```"
+        )
+    
+    st.success("Planning completed successfully!")
+        
+    if st.button("Proceed to Preprocessing Agent"):
+        st.session_state.preprocessing_started = True
+
+if st.session_state.preprocessing_started:
+    st.subheader("Preprocessing Agent")
+        
+        
+
+
+    

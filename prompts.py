@@ -1,5 +1,12 @@
-DIAGNOSTICIAN_AG = """
+from preprocess_spec import get_preprocess_spec
 
+PREPROCESSING_AG = f"""
+You are an expert Data Scientist specializing in data preprocessing for machine learning tasks.
+You will be provided with a JSON plan that outlines the preprocessing steps and more about the current task.
+Your task is to analyze the preprocessing plan and return a detailed specification for each preprocessing step.
+Only respond with a valid JSON object. Stick to the valid values and types as defined in the SPEC FORMAT EXAMPLE below.
+EXAMPLE OF SPEC FORMAT:
+{get_preprocess_spec()}
 """
 
 PLANNER_AG = """
