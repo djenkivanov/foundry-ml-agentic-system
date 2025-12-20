@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Literal, TypedDict, Union
 import pandas as pd
+from preprocess_spec import PreprocessSpec
 
 Stage = Literal["plan", "preprocess", "train", "evaluate", "complete", "failed"]
 Task = Literal["regression", "classification"]
@@ -13,8 +14,9 @@ class State:
     
     target: str = ""
     task: Task = ""
-    insights: Dict[str, Any] = field(default_factory=list)
-    plan: Dict[str, Any] = field(default_factory=list)
+    insights: Dict[str, Any] = field(default_factory=dict)
+    plan: Dict[str, Any] = field(default_factory=dict)
+    preprocess_spec: PreprocessSpec = field(default_factory=dict)
     
     stage: Stage = "plan"
     errors: List[str] = field(default_factory=list)

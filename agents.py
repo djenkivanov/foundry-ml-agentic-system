@@ -15,6 +15,10 @@ def planner_agent(state: State, reasoning_stream=None, plan_stream=None):
         state.stage = "failed"
 
 
-def diagnostician_agent(state: State) -> State:
-    
-    return state
+def preprocessing_agent(state: State) -> State:
+    try:
+        logic.create_preprocess_spec(state)
+        logic.execute_preprocess_spec(state)
+    except Exception as e:
+        state.errors.append(str(e))
+        state.stage = "failed"

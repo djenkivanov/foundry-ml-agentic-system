@@ -11,6 +11,7 @@ from custom_state import State, Task
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_KEY"))
+model = "o4-mini"
 
 def get_data_insight(state: State) -> State:
     df_train_insights = return_insight_summary(state.train_ds)
@@ -53,7 +54,7 @@ def create_initial_plan(state, reasoning_stream=None, plan_stream=None):
     final_response = None
     
     with client.responses.stream(
-        model="o4-mini",
+        model=model,
         reasoning={"summary": "detailed"},
         input=[
             {
@@ -100,6 +101,37 @@ def build_planner_prompt(state):
     {pretty_test_insights}
     """
     return prompt
+
+
+def build_preprocess_spec(state: State) -> str:
+    preprocess_prompt = f"""    
+    Here is the preprocessing plan:
+    {state.plan}
+    """
+    final_response = client.chat.completions.create(
+        model=model,
+        input=[
+            {
+                "role": "system",
+                "content": prompts.PREPROCESSING_AG
+            },
+            {
+                "role": "user",
+                "content": preprocess_prompt
+            }
+        ],
+        max_tokens=1000,
+        temperature=0.2,
+    )
+    
+    preprocess_spec = final_response.choices[0].message.content
+    state.preprocess_spec = preprocess_spec
+
+
+def execute_preprocess_spec(state: State) -> State:
+    state.stage = "train"
+    # preprocessing state.train_ds inplace here
+    return state
 
 
 if __name__ == "__main__":
