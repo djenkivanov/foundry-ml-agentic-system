@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional, Literal
+from typing import List, Dict, Any, Optional, Literal, TypedDict, Union
 import pandas as pd
 
 Stage = Literal["plan", "preprocess", "train", "evaluate", "complete", "failed"]
