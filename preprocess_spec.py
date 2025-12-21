@@ -58,6 +58,7 @@ class PreprocessSpec(TypedDict, total=False):
 def get_preprocess_spec():
     return """
     {
+        "drop_columns": ["list", "of", "columns", "to", "drop"],
         "numeric": {
             "columns": "auto" | ["list", "of", "numeric", "columns"],
             "imputer": "mean" | "median" | "most_frequent" | "constant" | null,

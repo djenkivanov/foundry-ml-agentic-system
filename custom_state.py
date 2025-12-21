@@ -12,6 +12,11 @@ class State:
     train_ds: pd.DataFrame
     test_ds: pd.DataFrame
     
+    x_train: Optional[pd.DataFrame] = None
+    y_train: Optional[pd.Series] = None
+    x_test: Optional[pd.DataFrame] = None
+    y_test: Optional[pd.Series] = None
+    
     target: str = ""
     task: Task = ""
     insights: Dict[str, Any] = field(default_factory=dict)

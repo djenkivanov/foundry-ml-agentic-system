@@ -8,6 +8,9 @@ import json
 import re
 import streamlit as st
 from custom_state import State, Task
+from sklearn.impute import SimpleImputer
+from sklearn import preprocessing
+from sklearn.compose import ColumnTransformer
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_KEY"))
@@ -103,14 +106,18 @@ def build_planner_prompt(state):
     return prompt
 
 
-def build_preprocess_spec(state: State) -> str:
-    preprocess_prompt = f"""    
+def create_preprocess_spec(state: State) -> str:
+    pretty_train_insights = "\n".join([f"{k}:\n{v}\n\n" for k, v in state.insights["training_dataset"].items()])
+    preprocess_prompt = f"""
+    Here is the training dataset insights:
+    {pretty_train_insights}
+    
     Here is the preprocessing plan:
     {state.plan}
     """
     final_response = client.chat.completions.create(
         model=model,
-        input=[
+        messages=[
             {
                 "role": "system",
                 "content": prompts.PREPROCESSING_AG
@@ -120,27 +127,102 @@ def build_preprocess_spec(state: State) -> str:
                 "content": preprocess_prompt
             }
         ],
-        max_tokens=1000,
-        temperature=0.2,
     )
     
     preprocess_spec = final_response.choices[0].message.content
-    state.preprocess_spec = preprocess_spec
+    state.preprocess_spec = json.loads(preprocess_spec)
 
 
 def execute_preprocess_spec(state: State) -> State:
+    drop_columns = state.preprocess_spec.get("drop_columns", [])
+    numeric = state.preprocess_spec.get("numeric", {})
+    categorical = state.preprocess_spec.get("categorical", {})
+    df_train = state.train_ds.copy()
+    df_train = df_train.drop(columns=[state.target])
+    
+    if state.target in drop_columns:
+        drop_columns.remove(state.target)
+    
+    if drop_columns:
+        df_train = df_train.drop(columns=drop_columns)
+        
+    if numeric.get("columns"):
+        cols_num = numeric["columns"] if numeric.get("columns") != "auto" else df_train.select_dtypes(include=["number"]).columns.tolist()
+               
+    if numeric.get("imputer"):
+        imputer_strategy = numeric["imputer"]
+        
+    if numeric.get("scaler"):
+        scaler = scalers.get(numeric["scaler"])
+       
+    if categorical.get("columns"):
+        cols_cat = categorical["columns"] if categorical.get("columns") != "auto" else df_train.select_dtypes(include=["object", "category"]).columns.tolist()
+
+    if categorical.get("imputer"):
+        imputer_strategy = categorical["imputer"]
+        
+    if categorical.get("encoder"):
+        encoder = encoders.get(categorical["encoder"])
+        
+    ct = ColumnTransformer(transformers=[
+        ('n1', SimpleImputer(strategy=imputer_strategy), cols_num),
+        ('n2', scaler(), cols_num),
+        ('c1', SimpleImputer(strategy=imputer_strategy), cols_cat),
+        ('c2', encoder(), cols_cat)
+    ], remainder='passthrough')
+    
+    cols = [cols_cat, cols_num]
+    
+    for col_list in cols:
+        for col in col_list[:]:
+            if col not in state.train_ds.columns:
+                col_list.remove(col)
+    
+    df_processed = ct.fit_transform(df_train)
+    state.x_train = pd.DataFrame(df_processed, columns=ct.get_feature_names_out())
+    state.y_train = state.train_ds[state.target]
+
     state.stage = "train"
-    # preprocessing state.train_ds inplace here
-    return state
+    
+
+scalers = {
+    "standard": preprocessing.StandardScaler,
+    "minmax": preprocessing.MinMaxScaler,
+    "robust": preprocessing.RobustScaler
+}
+
+encoders = {
+    "onehot": preprocessing.OneHotEncoder,
+    "ordinal": preprocessing.OrdinalEncoder
+}
 
 
 if __name__ == "__main__":
-    df = pd.read_csv("trainWithNull.csv")
+    df_train = pd.read_csv("titanic train.csv")
+    df_test = pd.read_csv("titanic test.csv")
+    
+    spec = {
+        "drop_columns": ["Name", "Ticket", "Cabin"],
+        "numeric": {
+            "columns": ["Age", "Fare"],
+            "imputer": "median",
+            "scaler": "robust"
+        },
+        "categorical": {
+            "columns": ["Sex", "Embarked", "Pclass", "Deck", "Title", "AgeBin", "FareBin"],
+            "imputer": "most_frequent",
+            "encoder": "onehot"
+        }
+    }
+    
     state = State(
         prompt="",
-        train_ds=df,
-        test_ds=df,
+        train_ds=df_train,
+        test_ds=df_test,
+        preprocess_spec=spec,
+        target="Survived",
     )
     
-    # infer planner agent -> get data insight and create plan
-    agents.planner_agent(state)
+    execute_preprocess_spec(state)
+    
+    
