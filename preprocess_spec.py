@@ -68,6 +68,9 @@ def get_preprocess_spec():
             "columns": "auto" | ["list", "of", "categorical", "columns"],
             "imputer": "most_frequent" | "constant" | null,
             "encoder": "onehot" | "ordinal" | null
+        },
+        "feature_engineering": {
+            detailed instructions for feature engineering steps can be added here
         }
     }
 """

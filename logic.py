@@ -11,6 +11,7 @@ from custom_state import State, Task
 from sklearn.impute import SimpleImputer
 from sklearn import preprocessing
 from sklearn.compose import ColumnTransformer
+import feature_engineering
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_KEY"))
@@ -135,7 +136,12 @@ def create_preprocess_spec(state: State) -> str:
 
 def execute_preprocess_spec(state: State) -> State:
     ct, df_train, df_test = get_ct(state)
-            
+
+    for derive_op in state.preprocess_spec.get("feature_engineering", []):
+        if "derive" in derive_op:
+            df_train = feature_engineering.derive(df_train, derive_op["derive"]["new_column"], derive_op["derive"]["expression"])
+            df_test = feature_engineering.derive(df_test, derive_op["derive"]["new_column"], derive_op["derive"]["expression"])
+
     df_processed_train = ct.fit_transform(df_train)
     
     state.x_train = pd.DataFrame(df_processed_train, columns=ct.get_feature_names_out())
