@@ -33,6 +33,8 @@ if "preprocessing_started" not in st.session_state:
     st.session_state.preprocessing_started = False
 if "streaming_in_progress" not in st.session_state:
     st.session_state.streaming_in_progress = False
+if "plan_successful" not in st.session_state:
+    st.session_state.plan_successful = False
 
 if st.button("Start foundry process"):
     if training_ds is None or test_ds is None:
@@ -69,6 +71,7 @@ if st.session_state.train_df is not None and st.session_state.test_df is not Non
             status_box.error(f"Error during planning: {st.session_state.state.errors}")
         else:
             st.session_state.plan_done = True
+            st.session_state.plan_successful = True
         
         st.session_state.streaming_in_progress = False
         reasoning_stream.empty()
@@ -84,10 +87,10 @@ if st.session_state.plan_done:
     if st.session_state.plan_text:
         st.markdown(
             "## Planner Agent Plan\n\n"
-            f"```json\n{st.session_state.plan_text}\n```"
+            f"```json\n{json.dumps(json.loads(st.session_state.plan_text), indent=2)}\n```"
         )
-    
-    st.success("Planning completed successfully!")
+    if st.session_state.plan_successful:
+        st.success("Planning completed successfully!")
         
     if st.button("Proceed to Preprocessing Agent"):
         st.session_state.preprocessing_started = True
@@ -96,7 +99,7 @@ if st.session_state.plan_done:
 if st.session_state.preprocessing_started:
     st.subheader("Preprocessing Agent")
     agents.preprocessing_agent(st.session_state.state)
-    st.markdown(f"```json\n{json.dumps(st.session_state.state.preprocess_spec)}\n```")
+    st.markdown(f"```json\n{json.dumps(st.session_state.state.preprocess_spec, indent=2)}\n```")
     if st.session_state.state.stage == "failed":
         st.error(f"Error during preprocessing: {st.session_state.state.errors}")
     else:

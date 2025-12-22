@@ -78,7 +78,7 @@ def create_initial_plan(state, reasoning_stream=None, plan_stream=None):
 
             elif event.type == "response.output_text.delta":
                 st.session_state.plan_text += event.delta
-                plan_stream.markdown(f"## Planner Agent Plan\n\n```json\n{st.session_state.plan_text}\n```")
+                plan_stream.markdown(f"## Planner Agent Plan\n\n```json\n{json.dumps(json.loads(st.session_state.plan_text), indent=2)}\n```")
     
         final_response = stream.get_final_response()
     
