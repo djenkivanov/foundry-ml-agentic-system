@@ -106,6 +106,7 @@ if st.session_state.preprocessing_started:
         st.success("Preprocessing completed successfully!")
     st.dataframe(st.session_state.state.x_train.head())
     st.dataframe(st.session_state.state.y_train.head())
+    st.dataframe(st.session_state.state.x_test.head())
         
         
 

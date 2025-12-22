@@ -134,18 +134,35 @@ def create_preprocess_spec(state: State) -> str:
 
 
 def execute_preprocess_spec(state: State) -> State:
+    ct, df_train, df_test = get_ct(state)
+            
+    df_processed_train = ct.fit_transform(df_train)
+    
+    state.x_train = pd.DataFrame(df_processed_train, columns=ct.get_feature_names_out())
+    state.y_train = state.train_ds[state.target]
+    
+    df_processed_test = ct.transform(df_test)
+    
+    state.x_test = pd.DataFrame(df_processed_test, columns=ct.get_feature_names_out())
+    
+    state.stage = "train"
+    
+
+def get_ct(state):
     drop_columns = state.preprocess_spec.get("drop_columns", [])
     numeric = state.preprocess_spec.get("numeric", {})
     categorical = state.preprocess_spec.get("categorical", {})
     df_train = state.train_ds.copy()
     df_train = df_train.drop(columns=[state.target])
     
+    df_test = state.test_ds.copy()
+    
     if state.target in drop_columns:
         drop_columns.remove(state.target)
     
     if drop_columns:
         df_train = df_train.drop(columns=drop_columns)
-        
+        df_test = df_test.drop(columns=drop_columns)
     if numeric.get("columns"):
         cols_num = numeric["columns"] if numeric.get("columns") != "auto" else df_train.select_dtypes(include=["number"]).columns.tolist()
                
@@ -164,26 +181,24 @@ def execute_preprocess_spec(state: State) -> State:
     if categorical.get("encoder"):
         encoder = encoders.get(categorical["encoder"])
         
+    remove_unknown_columns([cols_num, cols_cat])
+        
     ct = ColumnTransformer(transformers=[
         ('n1', SimpleImputer(strategy=imputer_strategy), cols_num),
         ('n2', scaler(), cols_num),
         ('c1', SimpleImputer(strategy=imputer_strategy), cols_cat),
         ('c2', encoder(), cols_cat)
     ], remainder='passthrough')
-    
-    cols = [cols_cat, cols_num]
-    
+
+    return ct, df_train, df_test
+
+
+def remove_unknown_columns(cols):
     for col_list in cols:
         for col in col_list[:]:
             if col not in state.train_ds.columns:
                 col_list.remove(col)
-    
-    df_processed = ct.fit_transform(df_train)
-    state.x_train = pd.DataFrame(df_processed, columns=ct.get_feature_names_out())
-    state.y_train = state.train_ds[state.target]
 
-    state.stage = "train"
-    
 
 scalers = {
     "standard": preprocessing.StandardScaler,
