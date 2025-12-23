@@ -74,8 +74,20 @@ def get_preprocess_spec():
             "imputer": "most_frequent" | "constant" | null,
             "encoder": "onehot" | "ordinal" | null
         },
-        "feature_engineering": {
-            detailed instructions for feature engineering steps can be added here
-        }
+        "feature_engineering": [
+            {
+                "operation": {
+                    "new_column": "new_feature_name",
+                    /* only write the expression needed to compute the new column in valid Python syntax */
+                    "expression": "df['column1'] + df['column2']" 
+                }
+            },
+            {
+                "operation": {
+                    "new_column": "another_feature_name",
+                    "expression": "df['column1'] * df['column2']"
+                }
+            },
+        ]
     }
 """

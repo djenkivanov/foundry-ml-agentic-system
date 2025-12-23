@@ -26,10 +26,10 @@ def preprocessing_agent(state: State) -> State:
         state.stage = "failed"
         
 
-def feature_engineering_agent(state: State) -> State:
-    try:
-        feature_engineering.refine_and_execute_operations(state)
-    except Exception as e:
-        state.errors.append(str(e))
-        state.stage = "failed"
-    return state
+# def feature_engineering_agent(state: State) -> State:
+#     try:
+#         feature_engineering.refine_and_execute_operations(state)
+#     except Exception as e:
+#         state.errors.append(str(e))
+#         state.stage = "failed"
+#     return state
