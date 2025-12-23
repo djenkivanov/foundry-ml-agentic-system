@@ -41,7 +41,7 @@ def derive(df, new_column, expression):
     df[new_column] = df.eval(expression)
     return df
 
-
+# TODO: need to handle case where new_column is None (i.e., overwrite)
 def extract(df, source_column, new_column, match):
     df[new_column] = df[source_column].apply(lambda x: str_extractor(str(x), match))
     return df
@@ -80,7 +80,7 @@ def get_feature_engineering_spec():
         {
             "derive": {
                 "new_column": "new_feature_name",
-                "expression": "existing_column1 + existing_column2"
+                "expression": "df['column1'] + df['column2']" /* only write the expression in Python needed to derive feature into new column */
             }
         },
         {
