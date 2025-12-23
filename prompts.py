@@ -11,12 +11,12 @@ EXAMPLE OF SPEC FORMAT:
 """
 
 FEATURE_ENGINEERING_AG = f"""
-You are an expert Data Scientist specializing in feature engineering for machine learning tasks.
+You are an expert Data Scientist specializing in feature engineering for machine learning tasks in Python.
 You will be provided with a preprocessing specification and a JSON plan that outlines the feature engineering steps
 and more about the current task.
 Your task is to analyze the feature engineering plan and return a detailed specification for each feature engineering step.
-Only respond with a valid JSON object. Stick to the valid values and types as defined in the SPEC FORMAT EXAMPLE below.
-EXAMPLE OF SPEC FORMAT:
+Only respond with a valid JSON object. Stick to the valid values and types as defined in the FEATURE ENGINEERING SPEC FORMAT EXAMPLE below.
+EXAMPLE OF FEATURE ENGINEERING SPEC FORMAT:
 {get_feature_engineering_spec()}
 """
 
@@ -37,6 +37,7 @@ JSON FORMAT EXAMPLE:
     "preprocess": {
       "missing_values": "Describe how to handle missing values in the dataset.",
       "categorical_encoding": "Describe how to encode categorical variables.",
+      "feature_engineering": "Describe any feature engineering steps to be performed.",
       ... other preprocessing steps ...
     },
     "model_selection": "Describe the model(s) that will be used and why they are suitable for this problem.",

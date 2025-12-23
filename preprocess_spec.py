@@ -40,6 +40,8 @@ CategoricalEncoder = Literal[
     None
 ]
 
+FeatureEngineering = Union[List[Dict[str, Any]], Dict[str, Any]]
+
 class NumericSpec(TypedDict, total=False):
     columns: NumericColumns
     imputer: NumericImputer
@@ -50,10 +52,13 @@ class CategoricalSpec(TypedDict, total=False):
     imputer: CategoricalImputer
     encoder: CategoricalEncoder
 
+class FeatureEngineeringSpec(TypedDict, total=False):
+    feature_engineering: FeatureEngineering
+
 class PreprocessSpec(TypedDict, total=False):
     numeric: NumericSpec
     categorical: CategoricalSpec
-
+    feature_engineering: FeatureEngineeringSpec
 
 def get_preprocess_spec():
     return """

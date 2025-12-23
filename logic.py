@@ -79,14 +79,14 @@ def create_initial_plan(state, reasoning_stream=None, plan_stream=None):
 
             elif event.type == "response.output_text.delta":
                 st.session_state.plan_text += event.delta
-                plan_stream.markdown(f"## Planner Agent Plan\n\n```json\n{json.dumps(json.loads(st.session_state.plan_text), indent=2)}\n```")
+                plan_stream.markdown(f"## Planner Agent Plan\n\n```json\n{st.session_state.plan_text}\n```")
     
         final_response = stream.get_final_response()
     
-    state.plan = final_response.output[1].content[0].text
+    state.plan = json.loads(final_response.output[1].content[0].text)
     state.stage = "preprocess"
-    state.task = json.loads(state.plan).get("plan", [{}]).get("task", "")
-    state.target = json.loads(state.plan).get("plan", [{}]).get("target", "")
+    state.task = state.plan.get("plan", [{}]).get("task", "")
+    state.target = state.plan.get("plan", [{}]).get("target", "")
 
 
 def build_planner_prompt(state):
@@ -114,7 +114,7 @@ def create_preprocess_spec(state: State) -> str:
     {pretty_train_insights}
     
     Here is the preprocessing plan:
-    {state.plan}
+    {json.dumps(state.plan, indent=2)}
     """
     final_response = client.chat.completions.create(
         model=model,
@@ -135,12 +135,9 @@ def create_preprocess_spec(state: State) -> str:
 
 
 def execute_preprocess_spec(state: State) -> State:
+    feature_engineering.init_feature_engineering(state)
+    
     ct, df_train, df_test = get_ct(state)
-
-    for derive_op in state.preprocess_spec.get("feature_engineering", []):
-        if "derive" in derive_op:
-            df_train = feature_engineering.derive(df_train, derive_op["derive"]["new_column"], derive_op["derive"]["expression"])
-            df_test = feature_engineering.derive(df_test, derive_op["derive"]["new_column"], derive_op["derive"]["expression"])
 
     df_processed_train = ct.fit_transform(df_train)
     
@@ -204,6 +201,32 @@ def remove_unknown_columns(cols):
         for col in col_list[:]:
             if col not in state.train_ds.columns:
                 col_list.remove(col)
+
+
+def get_refined_feature_engineering_spec(state: State) -> str:
+    fe_prompt = f"""
+    Here is the preprocessing plan:
+    {json.dumps(state.plan, indent=2)}
+    
+    Here is the preprocessing specification:
+    {json.dumps(state.preprocess_spec, indent=2)}
+    """
+    final_response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {
+                "role": "system",
+                "content": prompts.FEATURE_ENGINEERING_AG
+            },
+            {
+                "role": "user",
+                "content": fe_prompt
+            }
+        ],
+    )
+    
+    spec = final_response.choices[0].message.content
+    return json.loads(spec)
 
 
 scalers = {
