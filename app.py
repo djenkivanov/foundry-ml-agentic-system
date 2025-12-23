@@ -7,8 +7,8 @@ from custom_state import State
 
 st.title("Foundry ML")
 
-training_ds = st.file_uploader("Upload training dataset", type=["csv"])
-test_ds = st.file_uploader("Upload test dataset", type=["csv"])
+training_ds = st.file_uploader("Upload TRAINING dataset", type=["csv"])
+test_ds = st.file_uploader("Upload TEST dataset", type=["csv"])
 prompt = st.text_area("Enter the prompt for the desired ML model")
 
 if "train_df" not in st.session_state:
@@ -63,19 +63,19 @@ if st.session_state.train_df is not None and st.session_state.test_df is not Non
             train_ds=st.session_state.train_df,
             test_ds=st.session_state.test_df,
         )
-        
-        # infer planner agent -> get data insight and create plan
-        agents.planner_agent(st.session_state.state, reasoning_stream, plan_stream)
+            
+        with st.spinner("Planning in progress...", show_time=True):
+            agents.planner_agent(st.session_state.state, reasoning_stream, plan_stream)
 
-        if st.session_state.state.stage == "failed":
-            status_box.error(f"Error during planning: {st.session_state.state.errors}")
-        else:
-            st.session_state.plan_done = True
-            st.session_state.plan_successful = True
-        
-        st.session_state.streaming_in_progress = False
-        reasoning_stream.empty()
-        plan_stream.empty()
+            if st.session_state.state.stage == "failed":
+                status_box.error(f"Error during planning: {st.session_state.state.errors}")
+            else:
+                st.session_state.plan_done = True
+                st.session_state.plan_successful = True
+            
+            st.session_state.streaming_in_progress = False
+            reasoning_stream.empty()
+            plan_stream.empty()
 
 if st.session_state.plan_done:
     if st.session_state.reasoning_text:
@@ -98,13 +98,12 @@ if st.session_state.plan_done:
 
 if st.session_state.preprocessing_started:
     st.subheader("Preprocessing Agent")
-    agents.preprocessing_agent(st.session_state.state)
+    with st.spinner("Preprocessing in progress...", show_time=True):
+        agents.preprocessing_agent(st.session_state.state)
     st.markdown(f"```json\n{json.dumps(st.session_state.state.preprocess_spec, indent=2)}\n```")
-    st.markdown(f"New Feature Engineering Spec:\n```json\n{json.dumps(st.session_state.state.new_fe_spec, indent=2)}\n```")
     st.dataframe(st.session_state.state.train_ds.head())
     st.dataframe(st.session_state.state.test_ds.head())
     st.dataframe(st.session_state.state.x_train.head())
-    st.dataframe(st.session_state.state.y_train.head())
     st.dataframe(st.session_state.state.x_test.head())
     if st.session_state.state.stage == "failed":
         st.error(f"Error during preprocessing: {st.session_state.state.errors}")

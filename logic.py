@@ -184,7 +184,7 @@ def get_ct(state):
     if categorical.get("encoder"):
         encoder = encoders.get(categorical["encoder"])
         
-    remove_unknown_columns([cols_num, cols_cat])
+    remove_unknown_columns([cols_num, cols_cat], state)
         
     ct = ColumnTransformer(transformers=[
         ('n1', SimpleImputer(strategy=imputer_strategy), cols_num),
@@ -196,7 +196,7 @@ def get_ct(state):
     return ct, df_train, df_test
 
 
-def remove_unknown_columns(cols):
+def remove_unknown_columns(cols, state):
     for col_list in cols:
         for col in col_list[:]:
             if col not in state.train_ds.columns:
@@ -230,14 +230,14 @@ def get_refined_feature_engineering_spec(state: State) -> str:
 
 
 scalers = {
-    "standard": preprocessing.StandardScaler,
-    "minmax": preprocessing.MinMaxScaler,
-    "robust": preprocessing.RobustScaler
+    "standard": lambda: preprocessing.StandardScaler(),
+    "minmax": lambda: preprocessing.MinMaxScaler(),
+    "robust": lambda: preprocessing.RobustScaler()
 }
 
 encoders = {
-    "onehot": preprocessing.OneHotEncoder,
-    "ordinal": preprocessing.OrdinalEncoder
+    "onehot": lambda: preprocessing.OneHotEncoder(handle_unknown="ignore"),
+    "ordinal": lambda: preprocessing.OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1)
 }
 
 
@@ -268,5 +268,5 @@ if __name__ == "__main__":
     )
     
     execute_preprocess_spec(state)
-    
-    
+
+
