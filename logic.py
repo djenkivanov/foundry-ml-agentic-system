@@ -11,6 +11,7 @@ from custom_state import State, Task
 from sklearn.impute import SimpleImputer
 from sklearn import preprocessing
 from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
 import feature_engineering
 from sklearn.model_selection import train_test_split, cross_validate, GridSearchCV
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
@@ -138,17 +139,25 @@ def create_preprocess_spec(state: State) -> str:
     state.preprocess_spec = json.loads(preprocess_spec)
 
 
-def execute_preprocess_spec(state: State) -> State:
+def execute_preprocess_spec(state: State):
     feature_engineering.init_feature_engineering(state)
     
     ct, df_train, df_test = get_ct(state)
 
     df_processed_train = ct.fit_transform(df_train)
     
+    # in case of sparse matrix, convert to dense array
+    if hasattr(df_processed_train, 'toarray'):
+        df_processed_train = df_processed_train.toarray()
+    
     state.x_train = pd.DataFrame(df_processed_train, columns=ct.get_feature_names_out())
     state.y_train = state.train_ds[state.target]
     
     df_processed_test = ct.transform(df_test)
+    
+    # in case of sparse matrix, convert to dense array
+    if hasattr(df_processed_test, 'toarray'):
+        df_processed_test = df_processed_test.toarray()
     
     state.x_test = pd.DataFrame(df_processed_test, columns=ct.get_feature_names_out())
     
@@ -170,31 +179,29 @@ def get_ct(state):
     if drop_columns:
         df_train = df_train.drop(columns=drop_columns)
         df_test = df_test.drop(columns=drop_columns)
-    if numeric.get("columns"):
-        cols_num = numeric["columns"] if numeric.get("columns") != "auto" else df_train.select_dtypes(include=["number"]).columns.tolist()
-               
-    if numeric.get("imputer"):
-        imputer_strategy = numeric["imputer"]
-        
-    if numeric.get("scaler"):
-        scaler = scalers.get(numeric["scaler"])
-       
-    if categorical.get("columns"):
-        cols_cat = categorical["columns"] if categorical.get("columns") != "auto" else df_train.select_dtypes(include=["object", "category"]).columns.tolist()
-
-    if categorical.get("imputer"):
-        imputer_strategy = categorical["imputer"]
-        
-    if categorical.get("encoder"):
-        encoder = encoders.get(categorical["encoder"])
-        
+    
+    cols_num = numeric.get("columns", []) if numeric.get("columns") != "auto" else df_train.select_dtypes(include=["number"]).columns.tolist()
+    num_imputer_strategy = numeric.get("imputer", "mean")
+    num_scaler = scalers.get(numeric.get("scaler", "standard"))
+    
+    cols_cat = categorical.get("columns", []) if categorical.get("columns") != "auto" else df_train.select_dtypes(include=["object", "category"]).columns.tolist()
+    cat_imputer_strategy = categorical.get("imputer", "most_frequent")
+    cat_encoder = encoders.get(categorical.get("encoder", "onehot"))
+    
     remove_unknown_columns([cols_num, cols_cat], state)
-        
+    
+    num_transformer = Pipeline([
+      ('imputer', SimpleImputer(strategy=num_imputer_strategy)),
+      ('scaler', num_scaler())
+    ])
+    cat_transformer = Pipeline([
+      ('imputer', SimpleImputer(strategy=cat_imputer_strategy)),
+      ('encoder', cat_encoder())
+    ])
+    
     ct = ColumnTransformer(transformers=[
-        ('n1', SimpleImputer(strategy=imputer_strategy), cols_num),
-        ('n2', scaler(), cols_num),
-        ('c1', SimpleImputer(strategy=imputer_strategy), cols_cat),
-        ('c2', encoder(), cols_cat)
+        ('num', num_transformer, cols_num),
+        ('cat', cat_transformer, cols_cat)
     ], remainder='drop')
 
     return ct, df_train, df_test

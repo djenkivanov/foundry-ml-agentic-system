@@ -50,7 +50,7 @@ Only respond with a valid JSON object. Stick to the valid values and types as de
 JSON FORMAT EXAMPLE:
 "training": {
   "split": {
-    "stratified": "true",
+    "stratified": "True",
     "val_size": 0.2,
     "random_state": 42
     },
@@ -62,7 +62,7 @@ JSON FORMAT EXAMPLE:
     {
       "name": "LogisticRegression",
       "params_grid": {
-        "C": [0.1,1,10], "penalty": ["l2"]
+        "C": [0.1,1,10], "l1_ratio": [0.25,0.5,0.75]
         }
       },
     {
