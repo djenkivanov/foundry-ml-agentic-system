@@ -203,30 +203,44 @@ def remove_unknown_columns(cols, state):
                 col_list.remove(col)
 
 
-def get_refined_feature_engineering_spec(state: State) -> str:
-    fe_prompt = f"""
-    Here is the preprocessing plan:
+def refine_training_plan(state: State):
+    training_prompt = f"""
+    Here is the initial plan:
     {json.dumps(state.plan, indent=2)}
     
     Here is the preprocessing specification:
     {json.dumps(state.preprocess_spec, indent=2)}
+    
+    The target variable is: {state.target}
+    The task type is: {state.task}
+    
+    Based on this information, create a detailed training plan as a valid JSON object.
     """
-    final_response = client.chat.completions.create(
+    response = client.chat.completions.create(
         model=model,
         messages=[
             {
                 "role": "system",
-                "content": prompts.FEATURE_ENGINEERING_AG
+                "content": prompts.TRAINING_AG
             },
             {
                 "role": "user",
-                "content": fe_prompt
+                "content": training_prompt
             }
         ],
     )
     
-    spec = final_response.choices[0].message.content
-    return json.loads(spec)
+    training_plan = response.choices[0].message.content
+    state.training_plan = json.loads(training_plan)
+
+
+def initiate_training_process(state: State):
+    refine_training_plan(state)
+    convert_training_plan_to_code(state)
+
+
+def convert_training_plan_to_code(state: State):
+    pass
 
 
 scalers = {

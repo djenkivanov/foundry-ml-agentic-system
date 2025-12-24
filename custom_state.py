@@ -22,6 +22,7 @@ class State:
     insights: Dict[str, Any] = field(default_factory=dict)
     plan: Dict[str, Any] = field(default_factory=dict)
     preprocess_spec: PreprocessSpec = field(default_factory=dict)
+    training_plan: Dict[str, Any] = field(default_factory=dict)
     
     
     stage: Stage = "plan"

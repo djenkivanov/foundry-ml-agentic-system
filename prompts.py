@@ -41,3 +41,39 @@ JSON FORMAT EXAMPLE:
     }
 }
 """
+
+TRAINING_AG = """
+You are an expert Machine Learning Engineer. Your task is to refine the training plan.
+You will receive the initial plan, preprocessing specification, and applied feature engineering steps.
+Based on this information, create a detailed training plan as a valid JSON object.
+Only respond with a valid JSON object. Stick to the valid values and types as defined in the FORMAT EXAMPLE below.
+JSON FORMAT EXAMPLE:
+"training": {
+  "split": {
+    "strategy": "stratified",
+    "test_size": 0.2,
+    "random_state": 42
+    },
+  "cv": {
+    "strategy": "stratified_kfold",
+    "n_splits": 5,
+    "shuffle": true,
+    "random_state": 42
+    },
+  "metric": "roc_auc",
+  "models": [
+    {
+      "name": "logistic_regression",
+      "params_grid": {
+        "C": [0.1,1,10], "penalty": ["l2"]
+        }
+      },
+    {
+      "name": "random_forest",
+      "params_grid": {
+        "n_estimators": [200,500], "max_depth": [5,10,null]
+        }
+      }
+  ]
+}
+"""
