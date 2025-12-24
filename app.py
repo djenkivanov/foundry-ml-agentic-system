@@ -35,6 +35,8 @@ if "streaming_in_progress" not in st.session_state:
     st.session_state.streaming_in_progress = False
 if "plan_successful" not in st.session_state:
     st.session_state.plan_successful = False
+if "training_started" not in st.session_state:
+    st.session_state.training_started = False
 
 if st.button("Start foundry process"):
     if training_ds is None or test_ds is None:
@@ -109,6 +111,25 @@ if st.session_state.preprocessing_started:
         st.error(f"Error during preprocessing: {st.session_state.state.errors}")
     else:
         st.success("Preprocessing completed successfully!")
+        
+    if st.button("Proceed to Training Agent"):
+        st.session_state.training_started = True
+        
+if st.session_state.training_started:
+    st.subheader("Training Agent")
+    with st.spinner("Training in progress...", show_time=True):
+        agents.training_agent(st.session_state.state)
+    st.subheader("Training Plan")
+    st.markdown(f"```json\n{json.dumps(st.session_state.state.training_plan, indent=2)}\n```")
+    
+    st.subheader("Best Model and Scores")
+    st.write(st.session_state.state.model)
+    st.markdown(f"```json\n{json.dumps(st.session_state.state.model_scores, indent=2)}\n```")
+    
+    if st.session_state.state.stage == "failed":
+        st.error(f"Error during training: {st.session_state.state.errors}")
+    else:
+        st.success("Training plan created successfully!")
     
         
         

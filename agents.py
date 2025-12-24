@@ -27,7 +27,8 @@ def preprocessing_agent(state: State) -> State:
         
 def training_agent(state: State) -> State:
     try:
-        logic.initiate_training_process(state)
+        logic.refine_training_plan(state)
+        logic.convert_training_plan_to_code(state)
     except Exception as e:
         state.errors.append(str(e))
         state.stage = "failed"

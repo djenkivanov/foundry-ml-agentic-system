@@ -23,7 +23,8 @@ class State:
     plan: Dict[str, Any] = field(default_factory=dict)
     preprocess_spec: PreprocessSpec = field(default_factory=dict)
     training_plan: Dict[str, Any] = field(default_factory=dict)
-    
+    model: Any = None
+    model_scores: Dict[str, Any] = field(default_factory=dict)
     
     stage: Stage = "plan"
     errors: List[str] = field(default_factory=list)

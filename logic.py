@@ -12,7 +12,9 @@ from sklearn.impute import SimpleImputer
 from sklearn import preprocessing
 from sklearn.compose import ColumnTransformer
 import feature_engineering
-from sklearn.model_selection import train_test_split, cross_validate
+from sklearn.model_selection import train_test_split, cross_validate, GridSearchCV
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.linear_model import LogisticRegression, LinearRegression
 
 
 load_dotenv()
@@ -193,7 +195,7 @@ def get_ct(state):
         ('n2', scaler(), cols_num),
         ('c1', SimpleImputer(strategy=imputer_strategy), cols_cat),
         ('c2', encoder(), cols_cat)
-    ], remainder='passthrough')
+    ], remainder='drop')
 
     return ct, df_train, df_test
 
@@ -236,22 +238,18 @@ def refine_training_plan(state: State):
     state.training_plan = json.loads(training_plan)
 
 
-def initiate_training_process(state: State):
-    refine_training_plan(state)
-    convert_training_plan_to_code(state)
-
-
 def convert_training_plan_to_code(state: State):
     training_plain = state.training_plan.get("training", {})
     split = training_plain.get("split", {})
     cv = training_plain.get("cv", {})
     
+    random_state = split.get("random_state", 42)
     x_train, x_val, y_train, y_val = train_test_split(
-        state.x_train,
-        state.y_train,
-        test_size=split.get("val_size", 0.2),
-        stratify=state.y_train if split.get("stratified", False) else None,
-        random_state=split.get("random_state", 42)
+      state.x_train,
+      state.y_train,
+      test_size=split.get("val_size", 0.2),
+      stratify=state.y_train if str(split.get("stratified", False)).lower() == "true" else None,
+      random_state=random_state
     )
     
     cross_val_params = {
@@ -259,9 +257,51 @@ def convert_training_plan_to_code(state: State):
         "cv": cv.get("n_splits", 5),
     }
     
+    models_with_params = [(model_dict.get("name"), model_dict.get("params_grid", {})) for model_dict in training_plain.get("models", [])]
+    
+    best_model = None
+    best_val_score = -float("inf")
+    scores = {}
+    
+    for model_name, params_grid in models_with_params:
+        model_init = models.get(model_name)
+        if not model_init:
+            continue
+        
+        model_instance = model_init(random_state=random_state)
+        
+        grid_search = GridSearchCV(
+            estimator=model_instance,
+            param_grid=params_grid,
+            scoring=cross_val_params["scoring"],
+            cv=cross_val_params["cv"],
+            n_jobs=-1
+        )
+        
+        grid_search.fit(x_train, y_train)
+        
+        val_score = grid_search.best_estimator_.score(x_val, y_val)
+        train_score = grid_search.best_score_
+        
+        if val_score > best_val_score:
+            best_val_score = val_score
+            best_model = grid_search.best_estimator_
+            scores = {
+                "model_name": model_name,
+                "train_score": train_score,
+                "val_score": val_score,
+            }
+    
+    state.model = best_model
+    state.model_scores = scores
     
     
-
+models = {
+    "LogisticRegression": lambda **kwargs: LogisticRegression(**kwargs),
+    "RandomForestClassifier": lambda **kwargs: RandomForestClassifier(**kwargs),
+    "LinearRegression": lambda **kwargs: LinearRegression(**kwargs),
+    "RandomForestRegressor": lambda **kwargs: RandomForestRegressor(**kwargs)
+}
 
 scalers = {
     "standard": lambda: preprocessing.StandardScaler(),
@@ -276,31 +316,206 @@ encoders = {
 
 
 if __name__ == "__main__":
-    df_train = pd.read_csv("titanic train.csv")
-    df_test = pd.read_csv("titanic test.csv")
+    train_ds = pd.read_csv("titanic train.csv")
+    test_ds = pd.read_csv("titanic test.csv")
+    target = "Survived"
+    task = "classification"
     
-    spec = {
-        "drop_columns": ["Name", "Ticket", "Cabin"],
-        "numeric": {
-            "columns": ["Age", "Fare"],
-            "imputer": "median",
-            "scaler": "robust"
-        },
-        "categorical": {
-            "columns": ["Sex", "Embarked", "Pclass", "Deck", "Title", "AgeBin", "FareBin"],
-            "imputer": "most_frequent",
-            "encoder": "onehot"
+    training_plan = json.loads("""{
+  "training": {
+    "split": {
+      "stratified": "true",
+      "val_size": 0.2,
+      "random_state": 42
+    },
+    "cv": {
+      "n_splits": 5,
+      "scoring": "roc_auc"
+    },
+    "models": [
+      {
+        "name": "LogisticRegression",
+        "params_grid": {
+          "C": [
+            0.01,
+            0.1,
+            1,
+            10
+          ],
+          "penalty": [
+            "l2"
+          ],
+          "solver": [
+            "liblinear"
+          ]
         }
+      },
+      {
+        "name": "RandomForestClassifier",
+        "params_grid": {
+          "n_estimators": [
+            100,
+            200,
+            500
+          ],
+          "max_depth": [
+            null,
+            5,
+            10,
+            20
+          ],
+          "min_samples_split": [
+            2,
+            5,
+            10
+          ]
+        }
+      },
+      {
+        "name": "XGBClassifier",
+        "params_grid": {
+          "n_estimators": [
+            100,
+            200,
+            500
+          ],
+          "max_depth": [
+            3,
+            5,
+            7
+          ],
+          "learning_rate": [
+            0.01,
+            0.1,
+            0.2
+          ],
+          "subsample": [
+            0.6,
+            0.8,
+            1.0
+          ],
+          "colsample_bytree": [
+            0.6,
+            0.8,
+            1.0
+          ]
+        }
+      }
+    ]
+  }
+}
+""")
+    
+    preprocess_spec = {
+  "drop_columns": [
+    "PassengerId",
+    "Name",
+    "Ticket",
+    "Cabin"
+  ],
+  "numeric": {
+    "columns": [
+      "Pclass",
+      "Age",
+      "SibSp",
+      "Parch",
+      "Fare",
+      "FamilySize",
+      "IsAlone"
+    ],
+    "imputer": "median",
+    "scaler": "robust"
+  },
+  "categorical": {
+    "columns": [
+      "Sex",
+      "Embarked",
+      "Title",
+      "Deck"
+    ],
+    "imputer": "most_frequent",
+    "encoder": "onehot"
+  },
+  "feature_engineering": [
+    {
+      "operation": {
+        "new_column": "Title",
+        "expression": "df['Name'].str.extract(', (.*?)\\.')"
+      }
+    },
+    {
+      "operation": {
+        "new_column": "FamilySize",
+        "expression": "df['SibSp'] + df['Parch'] + 1"
+      }
+    },
+    {
+      "operation": {
+        "new_column": "IsAlone",
+        "expression": "(df['FamilySize'] == 1).astype(int)"
+      }
+    },
+    {
+      "operation": {
+        "new_column": "Deck",
+        "expression": "df['Cabin'].fillna('U').str[0]"
+      }
+    },
+    {
+      "operation": {
+        "new_column": "AgeBin",
+        "expression": "pd.qcut(df['Age'], 4, labels=False)"
+      }
+    },
+    {
+      "operation": {
+        "new_column": "FareBin",
+        "expression": "pd.qcut(df['Fare'], 4, labels=False)"
+      }
     }
+  ]
+}
+    
+    plan = {
+  "plan": {
+    "task": "classification",
+    "target": "Survived",
+    "preprocess": {
+      "missing_values": "Age: impute by median age grouped by Title (extracted from Name). Fare (test only one missing): impute with median. Embarked: fill with mode. Cabin: extract Deck letter (first char); fill missing Cabin as 'U' for Unknown.",
+      "feature_engineering": "Extract Title from Name and group rare titles into 'Other'. Create FamilySize = SibSp + Parch + 1. Create IsAlone flag = 1 if FamilySize == 1 else 0. Extract Deck from Cabin. Optionally bin Fare and Age into quartiles.",
+      "categorical_encoding": "Sex: map to {male:0, female:1}. One-hot encode Title, Embarked, Deck. Pclass kept as ordinal numeric.",
+      "feature_selection": "Drop Name, Ticket, Cabin (after Deck extraction), PassengerId. Retain Pclass, Sex, Age, SibSp, Parch, Fare, Embarked dummies, Title dummies, Deck dummies, FamilySize, IsAlone.",
+      "scaling": "Apply RobustScaler or StandardScaler to numeric features (Age, Fare, FamilySize) within a pipeline to mitigate outliers."
+    },
+    "model_selection": "Train a baseline Logistic Regression for interpretability. Then train tree-based models: RandomForestClassifier and XGBoostClassifier for non-linear interactions and robust handling of missing/imputed data. Consider light ensembling of top two models.",
+    "training": {
+      "train_val_split": "Perform stratified k-fold cross-validation (k=5) on the training set to maintain class balance.",
+      "hyperparameter_tuning": "Use RandomizedSearchCV or Bayesian Optimization within the cross-validation folds to tune key hyperparameters: for RF (n_estimators, max_depth, min_samples_split), for XGBoost (n_estimators, max_depth, learning_rate, subsample, colsample_bytree).",
+      "pipeline": "Build sklearn Pipeline combining preprocessing steps and model to prevent data leakage.",
+      "feature_importance": "After training tree models, extract feature importances to confirm or refine feature set."
+    },
+    "evaluation": {
+      "metrics": "Primary: ROC AUC. Secondary: accuracy, precision, recall, F1-score. Use confusion matrix to inspect error types.",
+      "cross_validation": "Report mean and standard deviation of CV metrics. Use stratified 5-fold CV.",
+      "final_assessment": "Plot ROC curves for each model; choose model with best trade-off of AUC and F1.",
+      "threshold_tuning": "Optionally adjust decision threshold to optimize F1 or recall as per business needs."
+    },
+    "prediction": "Retrain the selected model on the full training set with best hyperparameters. Apply the same preprocessing pipeline to the test set and generate final Survived predictions."
+  }
+}
     
     state = State(
+        train_ds=train_ds,
+        test_ds=test_ds,
         prompt="",
-        train_ds=df_train,
-        test_ds=df_test,
-        preprocess_spec=spec,
-        target="Survived",
+        target=target,
+        task=task,
+        preprocess_spec=preprocess_spec,
+        plan=plan,
+        training_plan=training_plan
     )
     
     execute_preprocess_spec(state)
+    convert_training_plan_to_code(state)
 
 
