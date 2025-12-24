@@ -50,26 +50,23 @@ Only respond with a valid JSON object. Stick to the valid values and types as de
 JSON FORMAT EXAMPLE:
 "training": {
   "split": {
-    "strategy": "stratified",
-    "test_size": 0.2,
+    "stratified": "true",
+    "val_size": 0.2,
     "random_state": 42
     },
   "cv": {
-    "strategy": "stratified_kfold",
     "n_splits": 5,
-    "shuffle": true,
-    "random_state": 42
+    "scoring": "roc_auc",
     },
-  "metric": "roc_auc",
   "models": [
     {
-      "name": "logistic_regression",
+      "name": "LogisticRegression",
       "params_grid": {
         "C": [0.1,1,10], "penalty": ["l2"]
         }
       },
     {
-      "name": "random_forest",
+      "name": "RandomForestClassifier",
       "params_grid": {
         "n_estimators": [200,500], "max_depth": [5,10,null]
         }

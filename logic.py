@@ -12,6 +12,8 @@ from sklearn.impute import SimpleImputer
 from sklearn import preprocessing
 from sklearn.compose import ColumnTransformer
 import feature_engineering
+from sklearn.model_selection import train_test_split, cross_validate
+
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_KEY"))
@@ -240,7 +242,25 @@ def initiate_training_process(state: State):
 
 
 def convert_training_plan_to_code(state: State):
-    pass
+    training_plain = state.training_plan.get("training", {})
+    split = training_plain.get("split", {})
+    cv = training_plain.get("cv", {})
+    
+    x_train, x_val, y_train, y_val = train_test_split(
+        state.x_train,
+        state.y_train,
+        test_size=split.get("val_size", 0.2),
+        stratify=state.y_train if split.get("stratified", False) else None,
+        random_state=split.get("random_state", 42)
+    )
+    
+    cross_val_params = {
+        "scoring": cv.get("scoring", "accuracy"),
+        "cv": cv.get("n_splits", 5),
+    }
+    
+    
+    
 
 
 scalers = {
