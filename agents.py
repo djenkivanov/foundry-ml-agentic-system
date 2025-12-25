@@ -33,3 +33,11 @@ def training_agent(state: State):
         state.errors.append(str(e))
         state.stage = "failed"
         
+
+def package_agent(state: State):
+    try:
+        logic.package_model(state)
+    except Exception as e:
+        state.errors.append(str(e))
+        state.stage = "failed"
+        

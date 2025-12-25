@@ -9,13 +9,11 @@ Task = Literal["regression", "classification"]
 @dataclass
 class State:
     prompt: str
-    train_ds: pd.DataFrame
-    test_ds: pd.DataFrame
+    raw_train_ds: pd.DataFrame
+    fe_train_ds: pd.DataFrame = None
     
     x_train: Optional[pd.DataFrame] = None
     y_train: Optional[pd.Series] = None
-    x_test: Optional[pd.DataFrame] = None
-    y_test: Optional[pd.Series] = None
     
     target: str = ""
     task: Task = ""

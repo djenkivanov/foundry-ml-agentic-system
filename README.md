@@ -2,7 +2,7 @@
 
 **This is still a work in progress and by far one of my most challenging and exciting projects!**
 
-FoundryML is a self-learning agentic system specifically crafted for Machine Learning automation. Give it a train and test set, initiate the process, then sit back and watch the *magic* unfold!
+FoundryML is a self-learning agentic system specifically crafted for Machine Learning automation. Give it a train set, initiate the process, then sit back and watch the *magic* unfold!
 
 ![](./img/FoundryMLDemo.gif)
 

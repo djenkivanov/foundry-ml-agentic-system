@@ -17,18 +17,18 @@ from sklearn.model_selection import train_test_split, cross_validate, GridSearch
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LogisticRegression, LinearRegression
 import xgboost as xgb
+import joblib
+import datetime
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_KEY"))
 model = "o4-mini"
 
 def get_data_insight(state: State) -> State:
-    df_train_insights = return_insight_summary(state.train_ds)
-    df_test_insights = return_insight_summary(state.test_ds)
+    df_train_insights = return_insight_summary(state.raw_train_ds)
     
     insights = {
         "training_dataset": df_train_insights,
-        "test_dataset": df_test_insights
     }
     
     state.insights = insights
@@ -97,7 +97,6 @@ def create_initial_plan(state, reasoning_stream=None, plan_stream=None):
 def build_planner_prompt(state):
     valid_tasks = ", ".join(Task.__args__)
     pretty_train_insights = "\n".join([f"{k}:\n{v}\n\n" for k, v in state.insights["training_dataset"].items()])
-    pretty_test_insights = "\n".join([f"{k}:\n{v}\n\n" for k, v in state.insights["test_dataset"].items()])
     prompt = f"""
     {prompts.PLANNER_AG}
     
@@ -105,9 +104,6 @@ def build_planner_prompt(state):
     
     Training dataset insights:
     {pretty_train_insights}
-    
-    Test dataset insights:
-    {pretty_test_insights}
     """
     return prompt
 
@@ -142,7 +138,7 @@ def create_preprocess_spec(state: State) -> str:
 def execute_preprocess_spec(state: State):
     feature_engineering.init_feature_engineering(state)
     
-    ct, df_train, df_test = get_ct(state)
+    ct, df_train = get_ct(state)
 
     df_processed_train = ct.fit_transform(df_train)
     
@@ -151,15 +147,7 @@ def execute_preprocess_spec(state: State):
         df_processed_train = df_processed_train.toarray()
     
     state.x_train = pd.DataFrame(df_processed_train, columns=ct.get_feature_names_out())
-    state.y_train = state.train_ds[state.target]
-    
-    df_processed_test = ct.transform(df_test)
-    
-    # in case of sparse matrix, convert to dense array
-    if hasattr(df_processed_test, 'toarray'):
-        df_processed_test = df_processed_test.toarray()
-    
-    state.x_test = pd.DataFrame(df_processed_test, columns=ct.get_feature_names_out())
+    state.y_train = state.raw_train_ds[state.target]
     
     state.stage = "train"
     
@@ -168,17 +156,14 @@ def get_ct(state):
     drop_columns = state.preprocess_spec.get("drop_columns", [])
     numeric = state.preprocess_spec.get("numeric", {})
     categorical = state.preprocess_spec.get("categorical", {})
-    df_train = state.train_ds.copy()
+    df_train = state.fe_train_ds.copy()
     df_train = df_train.drop(columns=[state.target])
-    
-    df_test = state.test_ds.copy()
-    
+        
     if state.target in drop_columns:
         drop_columns.remove(state.target)
     
     if drop_columns:
         df_train = df_train.drop(columns=drop_columns)
-        df_test = df_test.drop(columns=drop_columns)
     
     cols_num = numeric.get("columns", []) if numeric.get("columns") != "auto" else df_train.select_dtypes(include=["number"]).columns.tolist()
     num_imputer_strategy = numeric.get("imputer", "mean")
@@ -204,13 +189,13 @@ def get_ct(state):
         ('cat', cat_transformer, cols_cat)
     ], remainder='drop')
 
-    return ct, df_train, df_test
+    return ct, df_train
 
 
 def remove_unknown_columns(cols, state):
     for col_list in cols:
         for col in col_list[:]:
-            if col not in state.train_ds.columns:
+            if col not in state.raw_train_ds.columns:
                 col_list.remove(col)
 
 
@@ -319,10 +304,23 @@ def convert_training_plan_to_code(state: State):
     state.stage = "evaluate"
     state.model = best_model
     state.model_scores = best_score
+
+
+def package_model(state: State):
+    model_filename = f"foundryML_trained_model_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pkl"
+
+    ct, _ = get_ct(state)
+    full_pipeline = Pipeline([
+        ('feature_engineering', feature_engineering.init_feature_engineering(state)),
+        ('preprocessor', ct),
+        ('model', state.model)
+    ])
     
-    
-    
-    
+    full_pipeline.fit(state.raw_train_ds.drop(columns=[state.target]), state.raw_train_ds[state.target])
+    joblib.dump(full_pipeline, model_filename)
+    state.model_package_path = model_filename
+
+
 models = {
     "LogisticRegression": lambda **kwargs: LogisticRegression(**kwargs),
     "RandomForestClassifier": lambda **kwargs: RandomForestClassifier(**kwargs),
@@ -342,164 +340,3 @@ encoders = {
     "onehot": lambda: preprocessing.OneHotEncoder(handle_unknown="ignore"),
     "ordinal": lambda: preprocessing.OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1)
 }
-
-
-if __name__ == "__main__":
-    train_ds = pd.read_csv("titanic train.csv")
-    test_ds = pd.read_csv("titanic test.csv")
-    target = "Survived"
-    task = "classification"
-    
-    training_plan = json.loads("""{
-  "training": {
-    "split": {
-      "stratified": "true",
-      "val_size": 0.2,
-      "random_state": 42
-    },
-    "cv": {
-      "n_splits": 5,
-      "scoring": "roc_auc"
-    },
-    "models": [
-      {
-        "name": "XGBClassifier",
-        "params_grid": {
-          "n_estimators": [
-            200,
-            500
-          ],
-          "max_depth": [
-            3,
-            5,
-            7
-          ],
-          "learning_rate": [
-            0.01,
-            0.1,
-            0.2
-          ],
-          "subsample": [
-            0.6,
-            1.0
-          ]
-        }
-      }
-    ]
-  }
-}
-""")
-    
-    preprocess_spec = {
-  "drop_columns": [
-    "PassengerId",
-    "Name",
-    "Ticket",
-    "Cabin"
-  ],
-  "numeric": {
-    "columns": [
-      "Pclass",
-      "Age",
-      "SibSp",
-      "Parch",
-      "Fare",
-      "FamilySize",
-      "IsAlone"
-    ],
-    "imputer": "median",
-    "scaler": "robust"
-  },
-  "categorical": {
-    "columns": [
-      "Sex",
-      "Embarked",
-      "Title",
-      "Deck"
-    ],
-    "imputer": "most_frequent",
-    "encoder": "onehot"
-  },
-  "feature_engineering": [
-    {
-      "operation": {
-        "new_column": "Title",
-        "expression": "df['Name'].str.extract(', (.*?)\\.')"
-      }
-    },
-    {
-      "operation": {
-        "new_column": "FamilySize",
-        "expression": "df['SibSp'] + df['Parch'] + 1"
-      }
-    },
-    {
-      "operation": {
-        "new_column": "IsAlone",
-        "expression": "(df['FamilySize'] == 1).astype(int)"
-      }
-    },
-    {
-      "operation": {
-        "new_column": "Deck",
-        "expression": "df['Cabin'].fillna('U').str[0]"
-      }
-    },
-    {
-      "operation": {
-        "new_column": "AgeBin",
-        "expression": "pd.qcut(df['Age'], 4, labels=False)"
-      }
-    },
-    {
-      "operation": {
-        "new_column": "FareBin",
-        "expression": "pd.qcut(df['Fare'], 4, labels=False)"
-      }
-    }
-  ]
-}
-    
-    plan = {
-  "plan": {
-    "task": "classification",
-    "target": "Survived",
-    "preprocess": {
-      "missing_values": "Age: impute by median age grouped by Title (extracted from Name). Fare (test only one missing): impute with median. Embarked: fill with mode. Cabin: extract Deck letter (first char); fill missing Cabin as 'U' for Unknown.",
-      "feature_engineering": "Extract Title from Name and group rare titles into 'Other'. Create FamilySize = SibSp + Parch + 1. Create IsAlone flag = 1 if FamilySize == 1 else 0. Extract Deck from Cabin. Optionally bin Fare and Age into quartiles.",
-      "categorical_encoding": "Sex: map to {male:0, female:1}. One-hot encode Title, Embarked, Deck. Pclass kept as ordinal numeric.",
-      "feature_selection": "Drop Name, Ticket, Cabin (after Deck extraction), PassengerId. Retain Pclass, Sex, Age, SibSp, Parch, Fare, Embarked dummies, Title dummies, Deck dummies, FamilySize, IsAlone.",
-      "scaling": "Apply RobustScaler or StandardScaler to numeric features (Age, Fare, FamilySize) within a pipeline to mitigate outliers."
-    },
-    "model_selection": "Train a baseline Logistic Regression for interpretability. Then train tree-based models: RandomForestClassifier and XGBoostClassifier for non-linear interactions and robust handling of missing/imputed data. Consider light ensembling of top two models.",
-    "training": {
-      "train_val_split": "Perform stratified k-fold cross-validation (k=5) on the training set to maintain class balance.",
-      "hyperparameter_tuning": "Use RandomizedSearchCV or Bayesian Optimization within the cross-validation folds to tune key hyperparameters: for RF (n_estimators, max_depth, min_samples_split), for XGBoost (n_estimators, max_depth, learning_rate, subsample, colsample_bytree).",
-      "pipeline": "Build sklearn Pipeline combining preprocessing steps and model to prevent data leakage.",
-      "feature_importance": "After training tree models, extract feature importances to confirm or refine feature set."
-    },
-    "evaluation": {
-      "metrics": "Primary: ROC AUC. Secondary: accuracy, precision, recall, F1-score. Use confusion matrix to inspect error types.",
-      "cross_validation": "Report mean and standard deviation of CV metrics. Use stratified 5-fold CV.",
-      "final_assessment": "Plot ROC curves for each model; choose model with best trade-off of AUC and F1.",
-      "threshold_tuning": "Optionally adjust decision threshold to optimize F1 or recall as per business needs."
-    },
-    "prediction": "Retrain the selected model on the full training set with best hyperparameters. Apply the same preprocessing pipeline to the test set and generate final Survived predictions."
-  }
-}
-    
-    state = State(
-        train_ds=train_ds,
-        test_ds=test_ds,
-        prompt="",
-        target=target,
-        task=task,
-        preprocess_spec=preprocess_spec,
-        plan=plan,
-        training_plan=training_plan
-    )
-    
-    execute_preprocess_spec(state)
-    convert_training_plan_to_code(state)
-
-

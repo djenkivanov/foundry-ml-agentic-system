@@ -8,13 +8,10 @@ from custom_state import State
 st.title("Foundry ML")
 
 training_ds = st.file_uploader("Upload TRAINING dataset", type=["csv"])
-test_ds = st.file_uploader("Upload TEST dataset", type=["csv"])
 prompt = st.text_area("Enter the prompt for the desired ML model")
 
 if "train_df" not in st.session_state:
     st.session_state.train_df = None
-if "test_df" not in st.session_state:
-    st.session_state.test_df = None
 if "prompt" not in st.session_state:
     st.session_state.prompt = None
 if "insights" not in st.session_state:
@@ -29,28 +26,29 @@ if "plan_done" not in st.session_state:
     st.session_state.plan_done = False
 if "preprocess_done" not in st.session_state:
     st.session_state.preprocess_done = False
-if "preprocessing_started" not in st.session_state:
-    st.session_state.preprocessing_started = False
+if "preprocess_started" not in st.session_state:
+    st.session_state.preprocess_started = False
 if "streaming_in_progress" not in st.session_state:
     st.session_state.streaming_in_progress = False
 if "plan_successful" not in st.session_state:
     st.session_state.plan_successful = False
 if "training_started" not in st.session_state:
     st.session_state.training_started = False
-if "preprocess_done" not in st.session_state:
-    st.session_state.preprocess_done = False
 if "training_done" not in st.session_state:
     st.session_state.training_done = False
+if "evaluation_started" not in st.session_state:
+    st.session_state.evaluation_started = False
+if "evaluation_done" not in st.session_state:
+    st.session_state.evaluation_done = False
 
 if st.button("Start foundry process"):
-    if training_ds is None or test_ds is None:
-        st.error("Please upload both training and test datasets, and fill in the prompt.")
+    if training_ds is None:
+        st.error("Please upload the training dataset, and fill in the prompt.")
     else:
         st.session_state.train_df = pd.read_csv(training_ds)
-        st.session_state.test_df = pd.read_csv(test_ds)
         st.session_state.prompt = prompt
 
-if st.session_state.train_df is not None and st.session_state.test_df is not None and st.session_state.prompt is not None:
+if st.session_state.train_df is not None:
     st.subheader("Preview")
     st.dataframe(st.session_state.train_df.head())
 
@@ -66,8 +64,8 @@ if st.session_state.train_df is not None and st.session_state.test_df is not Non
         # init state that will be used across agents
         st.session_state.state = State(
             prompt=st.session_state.prompt,
-            train_ds=st.session_state.train_df,
-            test_ds=st.session_state.test_df,
+            raw_train_ds=st.session_state.train_df,
+            fe_train_ds=st.session_state.train_df.copy()
         )
             
         with st.spinner("Planning in progress...", show_time=True):
@@ -99,10 +97,10 @@ if st.session_state.plan_done:
         st.success("Planning completed successfully!")
         
     if st.button("Proceed to Preprocessing Agent"):
-        st.session_state.preprocessing_started = True
+        st.session_state.preprocess_started = True
 
 
-if st.session_state.preprocessing_started:
+if st.session_state.preprocess_started:
     st.subheader("Preprocessing Agent")
     if not st.session_state.preprocess_done:
         with st.spinner("Preprocessing in progress...", show_time=True):
@@ -132,8 +130,6 @@ if st.session_state.training_started:
         else:
             st.session_state.training_done = True
             st.success("Training plan created successfully!")
-    else:
-        st.info("Training already completed. Skipping rerun.")
 
     if st.session_state.training_done:
         st.subheader("Training Plan")
@@ -142,7 +138,20 @@ if st.session_state.training_started:
         st.subheader("Best Model and Scores")
         st.write(st.session_state.state.model)
         st.markdown(f"```json\n{json.dumps(st.session_state.state.model_scores, indent=2)}\n```")
-    
+        
+    if st.button("Prepare Trained Model for Download"):
+        with st.spinner("Packaging model...", show_time=True):
+            agents.package_agent(st.session_state.state)
+        if st.session_state.state.stage == "failed":
+            st.error(f"Error during model packaging: {st.session_state.state.errors}")
+        else:
+            with open(st.session_state.state.model_package_path, "rb") as model_file:
+                st.download_button(
+                    label="Download Model Package",
+                    data=model_file,
+                    file_name=st.session_state.state.model_package_path,
+                    mime="application/octet-stream"
+                )
         
         
 
