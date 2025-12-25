@@ -16,7 +16,7 @@ import feature_engineering
 from sklearn.model_selection import train_test_split, cross_validate, GridSearchCV
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LogisticRegression, LinearRegression
-
+import xgboost as xgb
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_KEY"))
@@ -246,6 +246,42 @@ def refine_training_plan(state: State):
 
 
 def convert_training_plan_to_code(state: State):
+    
+    def perform_gridsearch(model_name, params_grid):
+        nonlocal best_model, best_val_score, best_score, all_scores
+        model_init = models.get(model_name)
+        if not model_init:
+            return
+                
+        model_instance = model_init(random_state=random_state)
+
+        grid_search = GridSearchCV(
+            estimator=model_instance,
+            param_grid=params_grid,
+            scoring=cross_val_params["scoring"],
+            cv=cross_val_params["cv"],
+            n_jobs=-1
+        )
+        
+        grid_search.fit(x_train, y_train)
+        
+        val_score = grid_search.best_estimator_.score(x_val, y_val)
+        train_score = grid_search.best_score_
+        
+        all_scores[model_name] = {
+            "train_score": train_score,
+            "val_score": val_score,
+        }
+        
+        if val_score > best_val_score:
+            best_val_score = val_score
+            best_model = grid_search.best_estimator_
+            best_score = {
+                "model_name": model_name,
+                "train_score": train_score,
+                "val_score": val_score,
+            }
+    
     training_plain = state.training_plan.get("training", {})
     split = training_plain.get("split", {})
     cv = training_plain.get("cv", {})
@@ -268,46 +304,32 @@ def convert_training_plan_to_code(state: State):
     
     best_model = None
     best_val_score = -float("inf")
-    scores = {}
+    best_score = {}
+    all_scores = {}
     
-    for model_name, params_grid in models_with_params:
-        model_init = models.get(model_name)
-        if not model_init:
-            continue
-        
-        model_instance = model_init(random_state=random_state)
-        
-        grid_search = GridSearchCV(
-            estimator=model_instance,
-            param_grid=params_grid,
-            scoring=cross_val_params["scoring"],
-            cv=cross_val_params["cv"],
-            n_jobs=-1
-        )
-        
-        grid_search.fit(x_train, y_train)
-        
-        val_score = grid_search.best_estimator_.score(x_val, y_val)
-        train_score = grid_search.best_score_
-        
-        if val_score > best_val_score:
-            best_val_score = val_score
-            best_model = grid_search.best_estimator_
-            scores = {
-                "model_name": model_name,
-                "train_score": train_score,
-                "val_score": val_score,
-            }
+    with st.status("Training models...", expanded=True) as status:
+        for idx, (model_name, params_grid) in enumerate(models_with_params, start=1):
+            st.write(f"Fitting {model_name} ({idx}/{len(models_with_params)})...")
+            perform_gridsearch(model_name, params_grid)
+            model_scores = all_scores.get(model_name, {})
+            st.write(f"Finished {model_name} | Train Score: {model_scores.get('train_score', 0):.5f} | Val Score: {model_scores.get('val_score', 0):.5f}")
+        if best_score:
+            status.update(label=f"Training complete! Best: {best_score['model_name']} (val={best_val_score:.5f})")
     
+    state.stage = "evaluate"
     state.model = best_model
-    state.model_scores = scores
+    state.model_scores = best_score
+    
+    
     
     
 models = {
     "LogisticRegression": lambda **kwargs: LogisticRegression(**kwargs),
     "RandomForestClassifier": lambda **kwargs: RandomForestClassifier(**kwargs),
     "LinearRegression": lambda **kwargs: LinearRegression(**kwargs),
-    "RandomForestRegressor": lambda **kwargs: RandomForestRegressor(**kwargs)
+    "RandomForestRegressor": lambda **kwargs: RandomForestRegressor(**kwargs),
+    "XGBClassifier": lambda **kwargs: xgb.XGBClassifier(**kwargs),
+    "XGBRegressor": lambda **kwargs: xgb.XGBRegressor(**kwargs)
 }
 
 scalers = {
@@ -341,48 +363,9 @@ if __name__ == "__main__":
     },
     "models": [
       {
-        "name": "LogisticRegression",
-        "params_grid": {
-          "C": [
-            0.01,
-            0.1,
-            1,
-            10
-          ],
-          "penalty": [
-            "l2"
-          ],
-          "solver": [
-            "liblinear"
-          ]
-        }
-      },
-      {
-        "name": "RandomForestClassifier",
-        "params_grid": {
-          "n_estimators": [
-            100,
-            200,
-            500
-          ],
-          "max_depth": [
-            null,
-            5,
-            10,
-            20
-          ],
-          "min_samples_split": [
-            2,
-            5,
-            10
-          ]
-        }
-      },
-      {
         "name": "XGBClassifier",
         "params_grid": {
           "n_estimators": [
-            100,
             200,
             500
           ],
@@ -398,12 +381,6 @@ if __name__ == "__main__":
           ],
           "subsample": [
             0.6,
-            0.8,
-            1.0
-          ],
-          "colsample_bytree": [
-            0.6,
-            0.8,
             1.0
           ]
         }

@@ -37,6 +37,10 @@ if "plan_successful" not in st.session_state:
     st.session_state.plan_successful = False
 if "training_started" not in st.session_state:
     st.session_state.training_started = False
+if "preprocess_done" not in st.session_state:
+    st.session_state.preprocess_done = False
+if "training_done" not in st.session_state:
+    st.session_state.training_done = False
 
 if st.button("Start foundry process"):
     if training_ds is None or test_ds is None:
@@ -100,36 +104,44 @@ if st.session_state.plan_done:
 
 if st.session_state.preprocessing_started:
     st.subheader("Preprocessing Agent")
-    with st.spinner("Preprocessing in progress...", show_time=True):
-        agents.preprocessing_agent(st.session_state.state)
-    st.markdown(f"```json\n{json.dumps(st.session_state.state.preprocess_spec, indent=2)}\n```")
-    st.dataframe(st.session_state.state.train_ds.head())
-    st.dataframe(st.session_state.state.test_ds.head())
-    st.dataframe(st.session_state.state.x_train.head())
-    st.dataframe(st.session_state.state.x_test.head())
-    if st.session_state.state.stage == "failed":
-        st.error(f"Error during preprocessing: {st.session_state.state.errors}")
-    else:
+    if not st.session_state.preprocess_done:
+        with st.spinner("Preprocessing in progress...", show_time=True):
+            agents.preprocessing_agent(st.session_state.state)
+        if st.session_state.state.stage == "failed":
+            st.error(f"Error during preprocessing: {st.session_state.state.errors}")
+        else:
+            st.session_state.preprocess_done = True
+
+    if st.session_state.preprocess_done:
+        st.markdown(f"```json\n{json.dumps(st.session_state.state.preprocess_spec, indent=2)}\n```")
+        st.subheader("Preprocessed Training Data Preview")
+        st.dataframe(st.session_state.state.x_train.head())
         st.success("Preprocessing completed successfully!")
-        
+
     if st.button("Proceed to Training Agent"):
         st.session_state.training_started = True
+        st.session_state.training_done = False
         
 if st.session_state.training_started:
     st.subheader("Training Agent")
-    with st.spinner("Training in progress...", show_time=True):
-        agents.training_agent(st.session_state.state)
-    st.subheader("Training Plan")
-    st.markdown(f"```json\n{json.dumps(st.session_state.state.training_plan, indent=2)}\n```")
-    
-    st.subheader("Best Model and Scores")
-    st.write(st.session_state.state.model)
-    st.markdown(f"```json\n{json.dumps(st.session_state.state.model_scores, indent=2)}\n```")
-    
-    if st.session_state.state.stage == "failed":
-        st.error(f"Error during training: {st.session_state.state.errors}")
+    if not st.session_state.training_done:
+        with st.spinner("Training in progress...", show_time=True):
+            agents.training_agent(st.session_state.state)
+        if st.session_state.state.stage == "failed":
+            st.error(f"Error during training: {st.session_state.state.errors}")
+        else:
+            st.session_state.training_done = True
+            st.success("Training plan created successfully!")
     else:
-        st.success("Training plan created successfully!")
+        st.info("Training already completed. Skipping rerun.")
+
+    if st.session_state.training_done:
+        st.subheader("Training Plan")
+        st.markdown(f"```json\n{json.dumps(st.session_state.state.training_plan, indent=2)}\n```")
+        
+        st.subheader("Best Model and Scores")
+        st.write(st.session_state.state.model)
+        st.markdown(f"```json\n{json.dumps(st.session_state.state.model_scores, indent=2)}\n```")
     
         
         

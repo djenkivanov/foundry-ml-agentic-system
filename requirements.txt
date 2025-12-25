@@ -3,3 +3,4 @@ pandas
 openai
 dotenv
 scikit-learn
+xgboost

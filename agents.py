@@ -16,7 +16,7 @@ def planner_agent(state: State, reasoning_stream=None, plan_stream=None):
         raise e
 
 
-def preprocessing_agent(state: State) -> State:
+def preprocessing_agent(state: State):
     try:
         logic.create_preprocess_spec(state)
         logic.execute_preprocess_spec(state)
@@ -25,7 +25,7 @@ def preprocessing_agent(state: State) -> State:
         state.stage = "failed"
         
         
-def training_agent(state: State) -> State:
+def training_agent(state: State):
     try:
         logic.refine_training_plan(state)
         logic.convert_training_plan_to_code(state)
