@@ -19,22 +19,25 @@ from sklearn.linear_model import LogisticRegression, LinearRegression
 import xgboost as xgb
 import joblib
 import datetime
+from custom_state import State
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_KEY"))
 model = "o4-mini"
 
 def get_data_insight(state: State) -> State:
-    df_train_insights = return_insight_summary(state.raw_train_ds)
+    df_train_insights = return_insight_summary(state)
     
     insights = {
         "training_dataset": df_train_insights,
     }
     
+    state.trace.append({"data_insights": insights})
     state.insights = insights
         
 
-def return_insight_summary(df):
+def return_insight_summary(state):
+    df = state.raw_train_ds
     shape = df.shape
 
     # cols_missing_values_sum = df.isna().sum()
@@ -88,6 +91,14 @@ def create_initial_plan(state, reasoning_stream=None, plan_stream=None):
     
         final_response = stream.get_final_response()
     
+    state.trace.append({
+        "initial_plan": {
+            "reasoning": st.session_state.reasoning_text,
+            "plan": final_response.output[1].content[0].text,
+            "task": state.task,
+            "target": state.target
+        }
+    })
     state.reasoning = st.session_state.reasoning_text
     state.plan = json.loads(final_response.output[1].content[0].text)
     state.stage = "preprocess"
@@ -134,6 +145,7 @@ def create_preprocess_spec(state: State) -> str:
     
     preprocess_spec = final_response.choices[0].message.content
     state.preprocess_spec = json.loads(preprocess_spec)
+    state.trace.append({"preprocess_spec": state.preprocess_spec})
 
 
 def execute_preprocess_spec(state: State):
@@ -229,12 +241,13 @@ def refine_training_plan(state: State):
     
     training_plan = response.choices[0].message.content
     state.training_plan = json.loads(training_plan)
+    state.trace.append({"training_plan": state.training_plan})
 
 
 def convert_training_plan_to_code(state: State):
     
     def perform_gridsearch(model_name, params_grid):
-        nonlocal best_model, best_val_score, best_score, all_scores
+        nonlocal best_model, best_val_score, best_score, all_scores, training_trace
         model_init = models.get(model_name)
         if not model_init:
             return
@@ -255,6 +268,13 @@ def convert_training_plan_to_code(state: State):
         train_score = grid_search.best_score_
         
         all_scores[model_name] = {
+            "train_score": train_score,
+            "val_score": val_score,
+        }
+        
+        training_trace[model_name] = {
+            "parameters_tried": params_grid,
+            "best_parameters": grid_search.best_params_,
             "train_score": train_score,
             "val_score": val_score,
         }
@@ -292,6 +312,7 @@ def convert_training_plan_to_code(state: State):
     best_val_score = -float("inf")
     best_score = {}
     all_scores = {}
+    training_trace = {}
     
     with st.status("Training models...", expanded=True) as status:
         for idx, (model_name, params_grid) in enumerate(models_with_params, start=1):
@@ -302,10 +323,17 @@ def convert_training_plan_to_code(state: State):
         if best_score:
             status.update(label=f"Training complete! Best: {best_score['model_name']} (val={best_val_score:.5f})")
     
-    state.stage = "success"
     state.model = best_model
     state.best_model_scores = best_score
     state.all_model_scores = all_scores
+    state.trace.append({
+        "training": {
+            "training_trace": training_trace,
+            "best_model": best_score['model_name'],
+            "best_model_val_score": best_val_score,
+            "best_model_train_score": best_score['train_score']
+        }
+    })
 
 
 def package_model(state: State):
@@ -321,6 +349,10 @@ def package_model(state: State):
     full_pipeline.fit(state.raw_train_ds.drop(columns=[state.target]), state.raw_train_ds[state.target])
     joblib.dump(full_pipeline, model_filename)
     state.model_package_path = model_filename
+    state.stage = "success"
+    state.trace.append({
+        "model_packaged": model_filename
+    })
 
 
 models = {
