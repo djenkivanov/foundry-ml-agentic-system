@@ -11,7 +11,7 @@ def planner_agent(state: State, reasoning_stream=None, plan_stream=None):
             plan_stream=plan_stream
         )
     except Exception as e:
-        state.errors.append(str(e))
+        state.error = str(e)
         state.stage = "failed"
         raise e
 
@@ -21,7 +21,7 @@ def preprocessing_agent(state: State):
         logic.create_preprocess_spec(state)
         logic.execute_preprocess_spec(state)
     except Exception as e:
-        state.errors.append(str(e))
+        state.error = str(e)
         state.stage = "failed"
         
         
@@ -30,7 +30,7 @@ def training_agent(state: State):
         logic.refine_training_plan(state)
         logic.convert_training_plan_to_code(state)
     except Exception as e:
-        state.errors.append(str(e))
+        state.error = str(e)
         state.stage = "failed"
         
 
@@ -38,6 +38,6 @@ def package_agent(state: State):
     try:
         logic.package_model(state)
     except Exception as e:
-        state.errors.append(str(e))
+        state.error = str(e)
         state.stage = "failed"
         

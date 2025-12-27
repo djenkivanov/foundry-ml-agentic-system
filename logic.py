@@ -88,6 +88,7 @@ def create_initial_plan(state, reasoning_stream=None, plan_stream=None):
     
         final_response = stream.get_final_response()
     
+    state.reasoning = st.session_state.reasoning_text
     state.plan = json.loads(final_response.output[1].content[0].text)
     state.stage = "preprocess"
     state.task = state.plan.get("plan", [{}]).get("task", "")
@@ -301,9 +302,10 @@ def convert_training_plan_to_code(state: State):
         if best_score:
             status.update(label=f"Training complete! Best: {best_score['model_name']} (val={best_val_score:.5f})")
     
-    state.stage = "evaluate"
+    state.stage = "success"
     state.model = best_model
-    state.model_scores = best_score
+    state.best_model_scores = best_score
+    state.all_model_scores = all_scores
 
 
 def package_model(state: State):

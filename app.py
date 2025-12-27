@@ -4,6 +4,7 @@ import pandas as pd
 import logic
 import agents
 from custom_state import State
+import db
 
 st.title("Foundry ML")
 
@@ -72,7 +73,7 @@ if st.session_state.train_df is not None:
             agents.planner_agent(st.session_state.state, reasoning_stream, plan_stream)
 
             if st.session_state.state.stage == "failed":
-                status_box.error(f"Error during planning: {st.session_state.state.errors}")
+                status_box.error(f"Error during planning: {st.session_state.state.error}")
             else:
                 st.session_state.plan_done = True
                 st.session_state.plan_successful = True
@@ -80,6 +81,9 @@ if st.session_state.train_df is not None:
             st.session_state.streaming_in_progress = False
             reasoning_stream.empty()
             plan_stream.empty()
+
+if st.session_state.state.stage == "failed" or st.session_state.state.stage == "success":
+    db.log_task(st.session_state.state)
 
 if st.session_state.plan_done:
     if st.session_state.reasoning_text:
@@ -106,7 +110,7 @@ if st.session_state.preprocess_started:
         with st.spinner("Preprocessing in progress...", show_time=True):
             agents.preprocessing_agent(st.session_state.state)
         if st.session_state.state.stage == "failed":
-            st.error(f"Error during preprocessing: {st.session_state.state.errors}")
+            st.error(f"Error during preprocessing: {st.session_state.state.error}")
         else:
             st.session_state.preprocess_done = True
 
@@ -126,7 +130,7 @@ if st.session_state.training_started:
         with st.spinner("Training in progress...", show_time=True):
             agents.training_agent(st.session_state.state)
         if st.session_state.state.stage == "failed":
-            st.error(f"Error during training: {st.session_state.state.errors}")
+            st.error(f"Error during training: {st.session_state.state.error}")
         else:
             st.session_state.training_done = True
             st.success("Training plan created successfully!")
@@ -137,13 +141,13 @@ if st.session_state.training_started:
         
         st.subheader("Best Model and Scores")
         st.write(st.session_state.state.model)
-        st.markdown(f"```json\n{json.dumps(st.session_state.state.model_scores, indent=2)}\n```")
+        st.markdown(f"```json\n{json.dumps(st.session_state.state.best_model_scores, indent=2)}\n```")
         
     if st.button("Prepare Trained Model for Download"):
         with st.spinner("Packaging model...", show_time=True):
             agents.package_agent(st.session_state.state)
         if st.session_state.state.stage == "failed":
-            st.error(f"Error during model packaging: {st.session_state.state.errors}")
+            st.error(f"Error during model packaging: {st.session_state.state.error}")
         else:
             with open(st.session_state.state.model_package_path, "rb") as model_file:
                 st.download_button(
