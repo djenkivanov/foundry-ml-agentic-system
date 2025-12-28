@@ -11,6 +11,8 @@ st.title("Foundry ML")
 training_ds = st.file_uploader("Upload TRAINING dataset", type=["csv"])
 prompt = st.text_area("Enter the prompt for the desired ML model")
 
+if "state" not in st.session_state:
+    st.session_state.state = None
 if "train_df" not in st.session_state:
     st.session_state.train_df = None
 if "prompt" not in st.session_state:
@@ -41,6 +43,9 @@ if "evaluation_started" not in st.session_state:
     st.session_state.evaluation_started = False
 if "evaluation_done" not in st.session_state:
     st.session_state.evaluation_done = False
+
+if st.session_state.state and (st.session_state.state.stage == "failed" or st.session_state.state.stage == "success"):
+    db.log_task(st.session_state.state)
 
 if st.button("Start foundry process"):
     if training_ds is None:
@@ -81,9 +86,6 @@ if st.session_state.train_df is not None:
             st.session_state.streaming_in_progress = False
             reasoning_stream.empty()
             plan_stream.empty()
-
-if st.session_state.state.stage == "failed" or st.session_state.state.stage == "success":
-    db.log_task(st.session_state.state)
 
 if st.session_state.plan_done:
     if st.session_state.reasoning_text:

@@ -35,9 +35,11 @@ def init_db(path="database/task_history.db"):
     conn.commit()
     conn.close()
 
-def log_task(conn, state):
+def log_task(state):
+    init_db()
     artifacts = create_artifacts(state)
     
+    conn = sqlite3.connect("database/task_history.db")
     cur = conn.cursor()
     cur.execute(
         "INSERT INTO task_history (created_at, status, prompt, train_ds_path, error, artifacts) VALUES (?, ?, ?, ?, ?, ?)",

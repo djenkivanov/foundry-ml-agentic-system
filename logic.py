@@ -32,7 +32,6 @@ def get_data_insight(state: State) -> State:
         "training_dataset": df_train_insights,
     }
     
-    state.trace.append({"data_insights": insights})
     state.insights = insights
         
 
@@ -40,20 +39,14 @@ def return_insight_summary(state):
     df = state.raw_train_ds
     shape = df.shape
 
-    # cols_missing_values_sum = df.isna().sum()
-    # cols_missing_values = [k for k, v in cols_missing_values_sum.items() if v > 0]
-
-    cols_missing_values = df.isna().sum()
-
-    dtypes = df.dtypes
-    # description = df.describe()
-    unique_counts = df.nunique()
+    cols_missing_values = {k: int(v) for k, v in df.isna().sum().to_dict().items()}
+    dtypes = df.dtypes.astype(str).to_dict()
+    unique_counts = {k: int(v) for k, v in df.nunique().to_dict().items()}
 
     insights = {
-        "Shape": shape,
+        "Shape": list(shape),
         "Columns with missing values": cols_missing_values,
         "Data Types": dtypes,
-        # "Description": description,
         "Unique Counts": unique_counts
     }
     
@@ -186,7 +179,18 @@ def get_ct(state):
     cat_imputer_strategy = categorical.get("imputer", "most_frequent")
     cat_encoder = encoders.get(categorical.get("encoder", "onehot"))
     
-    remove_unknown_columns([cols_num, cols_cat], state)
+    remove_unknown_columns([cols_num, cols_cat], df_train.columns)
+
+    # Assign any leftover columns to numeric or categorical so none passthrough as raw strings
+    selected = set(cols_num + cols_cat)
+    leftover = [col for col in df_train.columns if col not in selected]
+    for col in leftover:
+        if df_train[col].dtype.kind in "biufc":
+            if col not in cols_num:
+                cols_num.append(col)
+        else:
+            if col not in cols_cat:
+                cols_cat.append(col)
     
     num_transformer = Pipeline([
       ('imputer', SimpleImputer(strategy=num_imputer_strategy)),
@@ -200,15 +204,15 @@ def get_ct(state):
     ct = ColumnTransformer(transformers=[
         ('num', num_transformer, cols_num),
         ('cat', cat_transformer, cols_cat)
-    ], remainder='drop')
+    ], remainder='passthrough')
 
     return ct, df_train
 
 
-def remove_unknown_columns(cols, state):
+def remove_unknown_columns(cols, valid_columns):
     for col_list in cols:
         for col in col_list[:]:
-            if col not in state.raw_train_ds.columns:
+            if col not in valid_columns:
                 col_list.remove(col)
 
 
@@ -323,6 +327,7 @@ def convert_training_plan_to_code(state: State):
         if best_score:
             status.update(label=f"Training complete! Best: {best_score['model_name']} (val={best_val_score:.5f})")
     
+    state.stage = "success"
     state.model = best_model
     state.best_model_scores = best_score
     state.all_model_scores = all_scores
@@ -349,7 +354,6 @@ def package_model(state: State):
     full_pipeline.fit(state.raw_train_ds.drop(columns=[state.target]), state.raw_train_ds[state.target])
     joblib.dump(full_pipeline, model_filename)
     state.model_package_path = model_filename
-    state.stage = "success"
     state.trace.append({
         "model_packaged": model_filename
     })
@@ -371,6 +375,6 @@ scalers = {
 }
 
 encoders = {
-    "onehot": lambda: preprocessing.OneHotEncoder(handle_unknown="ignore"),
+    "onehot": lambda: preprocessing.OneHotEncoder(handle_unknown="ignore", sparse_output=False),
     "ordinal": lambda: preprocessing.OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1)
 }
