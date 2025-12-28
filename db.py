@@ -41,7 +41,7 @@ def log_task(conn, state):
     cur = conn.cursor()
     cur.execute(
         "INSERT INTO task_history (created_at, status, prompt, train_ds_path, error, artifacts) VALUES (?, ?, ?, ?, ?, ?)",
-        (datetime.now(timezone.utc).isoformat(), state.stage, state.prompt, json.dumps(state.train_ds_path), state.error, json.dumps(artifacts))
+        (datetime.now(timezone.utc).isoformat(), state.stage, state.prompt, state.train_ds_path, state.error, json.dumps(artifacts))
     )
     task_id = cur.lastrowid
     conn.commit()
@@ -75,6 +75,28 @@ def fetch_task_embeddings(conn, task_id):
     return embeddings
 
 
+def fetch_task(conn, task_id):
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT id, created_at, status, prompt, train_ds_path, error, artifacts FROM task_history WHERE id = ?",
+        (task_id,)
+    )
+    row = cur.fetchone()
+    if row:
+        task_id, created_at, status, prompt, train_ds_path, error, artifacts_json = row
+        artifacts = json.loads(artifacts_json)
+        return {
+            "id": task_id,
+            "created_at": created_at,
+            "status": status,
+            "prompt": prompt,
+            "train_ds_path": train_ds_path,
+            "error": error,
+            "artifacts": artifacts
+        }
+    return None
+
+
 def create_artifacts(state):
     artifacts = {
         "prompt": state.prompt,
@@ -93,25 +115,28 @@ def create_artifacts(state):
 
 
 def build_embedding(state):
-    plan_str = "\n".join([f"{k}: {v}" for k, v in state.plan.items()])
-    preprocess_str = "\n".join([f"{k}: {v}" for k, v in state.preprocess_spec.items()])
-    training_plan_str = "\n".join([f"{k}: {v}" for k, v in state.training_plan.items()])
-    all_model_scores_str = "\n".join([f"{k}: {v}" for k, v in state.all_model_scores.items()])
+    insights_str = "\n".join([f"\t{k}: {v}" for k, v in state.insights.items()])
+    plan_str = "\n".join([f"\t{k}: {v}" for k, v in state.plan.items()])
+    preprocess_str = "\n".join([f"\t{k}: {v}" for k, v in state.preprocess_spec.items()])
+    training_plan_str = "\n".join([f"\t{k}: {v}" for k, v in state.training_plan.items()])
+    all_model_scores_str = "\n".join([f"\t{k}: {v}" for k, v in state.all_model_scores.items()])
     trace_str = ""
     for step in state.trace:
-        step_str = ", ".join([f"{k}: {v}" for k, v in step.items()])
+        step_str = ", ".join([f"\n\t{k}: {v}" for k, v in step.items()])
         trace_str += f"{step_str}\n"
     
-    text = f"Prompt: {state.prompt}\n"
-    text += f"Insights: {json.dumps(state.insights)}\n"
+    text = f"Prompt: \n\t{state.prompt}\n"
+    text += f"Insights: \n{insights_str}\n"
     text += f"Plan: \n{plan_str}\n"
     text += f"Preprocess Spec: \n{preprocess_str}\n"
     text += f"Training Plan: \n{training_plan_str}\n"
     text += f"Tested Models with Scores: \n{all_model_scores_str}\n"
-    text += f"Task Trace: \n{trace_str}\n"
+    text += f"Task Trace: {trace_str}"
     
     if state.reasoning:
-        text += f"Reasoning: {state.reasoning}\n"
+        text += f"Reasoning: \n\t{state.reasoning}\n"
+    
+    print(text)
     
     embedding = client.embeddings.create(
         input=[text],
@@ -124,6 +149,13 @@ def build_embedding(state):
 if __name__ == "__main__":
     init_db()
     conn = sqlite3.connect("database/task_history.db")
+    
+    trace = [
+        {"step": "plan", "detail": "Created initial plan."},
+        {"step": "preprocess", "detail": "Generated preprocessing specification."},
+        {"step": "train", "detail": "Completed model training."}
+    ]
+    
     state = State(
         prompt="Example prompt",
         raw_train_ds=None,
@@ -136,8 +168,11 @@ if __name__ == "__main__":
         all_model_scores={"linear_regression": {"rmse": 5.0}},
         reasoning="This is an example reasoning.",
         stage="success",
-        error=None
+        error=None,
+        trace=trace
     )
     log_task(conn, state)
     result = fetch_task_embeddings(conn, 1)
     print(result)
+    task = fetch_task(conn, 1)
+    print(task)
