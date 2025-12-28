@@ -82,7 +82,8 @@ def create_artifacts(state):
         "plan": state.plan,
         "preprocess_spec": state.preprocess_spec,
         "training_plan": state.training_plan,
-        "all_model_scores": state.all_model_scores
+        "all_model_scores": state.all_model_scores,
+        "trace": state.trace
     }
     
     if state.reasoning:
@@ -96,6 +97,10 @@ def build_embedding(state):
     preprocess_str = "\n".join([f"{k}: {v}" for k, v in state.preprocess_spec.items()])
     training_plan_str = "\n".join([f"{k}: {v}" for k, v in state.training_plan.items()])
     all_model_scores_str = "\n".join([f"{k}: {v}" for k, v in state.all_model_scores.items()])
+    trace_str = ""
+    for step in state.trace:
+        step_str = ", ".join([f"{k}: {v}" for k, v in step.items()])
+        trace_str += f"{step_str}\n"
     
     text = f"Prompt: {state.prompt}\n"
     text += f"Insights: {json.dumps(state.insights)}\n"
@@ -103,6 +108,7 @@ def build_embedding(state):
     text += f"Preprocess Spec: \n{preprocess_str}\n"
     text += f"Training Plan: \n{training_plan_str}\n"
     text += f"Tested Models with Scores: \n{all_model_scores_str}\n"
+    text += f"Task Trace: \n{trace_str}\n"
     
     if state.reasoning:
         text += f"Reasoning: {state.reasoning}\n"
