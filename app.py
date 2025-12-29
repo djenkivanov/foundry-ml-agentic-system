@@ -44,9 +44,6 @@ if "evaluation_started" not in st.session_state:
 if "evaluation_done" not in st.session_state:
     st.session_state.evaluation_done = False
 
-if st.session_state.state and (st.session_state.state.stage == "failed" or st.session_state.state.stage == "success"):
-    db.log_task(st.session_state.state)
-
 if st.button("Start foundry process"):
     if training_ds is None:
         st.error("Please upload the training dataset, and fill in the prompt.")
@@ -76,9 +73,11 @@ if st.session_state.train_df is not None:
             
         with st.spinner("Planning in progress...", show_time=True):
             agents.planner_agent(st.session_state.state, reasoning_stream, plan_stream)
+            # st.write(st.session_state.state.planner_prompt)
 
             if st.session_state.state.stage == "failed":
                 status_box.error(f"Error during planning: {st.session_state.state.error}")
+                db.log_task(st.session_state.state)
             else:
                 st.session_state.plan_done = True
                 st.session_state.plan_successful = True
@@ -113,6 +112,7 @@ if st.session_state.preprocess_started:
             agents.preprocessing_agent(st.session_state.state)
         if st.session_state.state.stage == "failed":
             st.error(f"Error during preprocessing: {st.session_state.state.error}")
+            db.log_task(st.session_state.state)
         else:
             st.session_state.preprocess_done = True
 
@@ -133,9 +133,11 @@ if st.session_state.training_started:
             agents.training_agent(st.session_state.state)
         if st.session_state.state.stage == "failed":
             st.error(f"Error during training: {st.session_state.state.error}")
+            db.log_task(st.session_state.state)
         else:
             st.session_state.training_done = True
             st.success("Training plan created successfully!")
+            db.log_task(st.session_state.state)
 
     if st.session_state.training_done:
         st.subheader("Training Plan")
@@ -150,6 +152,7 @@ if st.session_state.training_started:
             agents.package_agent(st.session_state.state)
         if st.session_state.state.stage == "failed":
             st.error(f"Error during model packaging: {st.session_state.state.error}")
+            db.log_task(st.session_state.state)
         else:
             with open(st.session_state.state.model_package_path, "rb") as model_file:
                 st.download_button(

@@ -14,8 +14,8 @@ You are an expert ML Engineer and Data Scientist. Your task is to create a detai
 1. The user's prompt describing the problem to be solved.
 2. A diagnostic summary of the training dataset.
 3. The target variable to be predicted.
-Based on this information, create a step-by-step plan that outlines how to approach the problem, including data preprocessing, model selection,
-training, evaluation, and any other relevant steps.
+Based on this information, create a step-by-step plan that outlines how to approach the problem, including task type, target,
+data preprocessing, model selection, and training.
 Respond with a valid JSON object containing the plan with clear and concise steps.
 JSON FORMAT EXAMPLE:
 {
@@ -32,11 +32,6 @@ JSON FORMAT EXAMPLE:
     "training": {
       "hyperparameter_tuning": "Describe the approach for hyperparameter tuning.",
       ... other training details ...
-    },
-    "evaluation": {
-      "metrics": "Specify the evaluation metrics to be used.",
-      "cross_validation": "Describe the cross-validation strategy if applicable.",
-      ... other evaluation details ...
     }
 }
 """

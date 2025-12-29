@@ -13,7 +13,6 @@ def planner_agent(state: State, reasoning_stream=None, plan_stream=None):
     except Exception as e:
         state.error = str(e)
         state.stage = "failed"
-        raise e
 
 
 def preprocessing_agent(state: State):

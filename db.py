@@ -1,3 +1,4 @@
+from email.mime import text
 import sqlite3
 from datetime import datetime, timezone
 import json
@@ -5,6 +6,7 @@ import array
 from openai import OpenAI
 import os, dotenv
 from custom_state import State
+from sklearn.metrics.pairwise import cosine_similarity
 
 dotenv.load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_KEY"))
@@ -147,6 +149,71 @@ def build_embedding(state):
     vector = embedding.data[0].embedding
     return vector
     
+
+def find_similar_tasks(state, top_k=3):
+    plan, reasoning, insights = state.plan, state.reasoning, state.insights
+    similarities = []
+    most_similar_task_ids = []
+    threshold = 0.5
+
+    conn = sqlite3.connect("database/task_history.db")
+    cur = conn.cursor()
+    cur.execute("SELECT id, artifacts FROM task_history")
+    rows = cur.fetchall()
+    
+    current_task_vector = client.embeddings.create(
+        input=[f"Plan: {json.dumps(plan)}\nReasoning: {reasoning}\nInsights: {json.dumps(insights)}"],
+        model=embedding_model
+    ).data[0].embedding
+    
+    for task_id, artifacts_json in rows:
+        artifacts = json.loads(artifacts_json)
+        task_plan = artifacts.get("plan", {})
+        task_reasoning = artifacts.get("reasoning", "")
+        task_insights = artifacts.get("insights", {})
+        
+        vector = client.embeddings.create(
+            input=[f"Plan: {json.dumps(task_plan)}\nReasoning: {task_reasoning}\nInsights: {json.dumps(task_insights)}"],
+            model=embedding_model
+        ).data[0].embedding
+        
+        sim = compute_similarity(current_task_vector, vector)
+        
+        similarities.append((task_id, sim))
+        
+    similarities.sort(key=lambda x: x[1], reverse=True)
+    for task_id, sim in similarities[:top_k]:
+        if sim >= threshold:
+            most_similar_task_ids.append((task_id, sim))
+
+    task_ids_str = [t_id for t_id, _ in most_similar_task_ids]
+    sim_score_map = {task_id: sim for task_id, sim in most_similar_task_ids}
+
+    cur.execute(f"SELECT id, created_at, status, prompt, train_ds_path, error, artifacts FROM task_history WHERE id IN \
+        ({','.join(['?']*len(task_ids_str))})", task_ids_str)
+    rows = cur.fetchall()
+    similar_tasks = []
+    for row in rows:
+        task_id, created_at, status, prompt, train_ds_path, error, artifacts_json = row
+        artifacts = json.loads(artifacts_json)
+        similar_tasks.append({
+            "id": task_id,
+            "created_at": created_at,
+            "status": status,
+            "prompt": prompt,
+            "train_ds_path": train_ds_path,
+            "error": error,
+            "artifacts": artifacts,
+            "similarity_score": sim_score_map.get(task_id)
+        })
+
+    return similar_tasks
+
+    
+def compute_similarity(vec1, vec2):
+    sim = cosine_similarity([vec1], [vec2])[0][0]
+    return sim
+        
 
 if __name__ == "__main__":
     init_db()

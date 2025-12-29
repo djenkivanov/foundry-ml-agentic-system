@@ -15,7 +15,7 @@ class State:
     
     x_train: Optional[pd.DataFrame] = None
     y_train: Optional[pd.Series] = None
-    
+    planner_prompt: str = ""
     target: str = ""
     task: Task = ""
     insights: Dict[str, Any] = field(default_factory=dict)

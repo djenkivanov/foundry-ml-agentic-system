@@ -20,6 +20,7 @@ import xgboost as xgb
 import joblib
 import datetime
 from custom_state import State
+import db
 
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_KEY"))
@@ -53,9 +54,9 @@ def return_insight_summary(state):
     return insights
 
 
-def create_initial_plan(state, reasoning_stream=None, plan_stream=None):
-    planner_prompt = build_planner_prompt(state)
+def create_initial_plan(state, reasoning_stream=None, plan_stream=None):    
     state.prompt = "None" if not state.prompt else state.prompt
+    planner_prompt = build_planner_prompt(state)
     final_response = None
     
     with client.responses.stream(
@@ -92,6 +93,7 @@ def create_initial_plan(state, reasoning_stream=None, plan_stream=None):
             "target": state.target
         }
     })
+    state.planner_prompt = planner_prompt
     state.reasoning = st.session_state.reasoning_text
     state.plan = json.loads(final_response.output[1].content[0].text)
     state.stage = "preprocess"
@@ -99,10 +101,10 @@ def create_initial_plan(state, reasoning_stream=None, plan_stream=None):
     state.target = state.plan.get("plan", [{}]).get("target", "")
 
 
-def build_planner_prompt(state):
+def build_planner_prompt(state):   
     valid_tasks = ", ".join(Task.__args__)
     pretty_train_insights = "\n".join([f"{k}:\n{v}\n\n" for k, v in state.insights["training_dataset"].items()])
-    prompt = f"""
+    planner_prompt = f"""
     {prompts.PLANNER_AG}
     
     For the task, choose one of the following valid task types: {valid_tasks}.
@@ -110,7 +112,40 @@ def build_planner_prompt(state):
     Training dataset insights:
     {pretty_train_insights}
     """
-    return prompt
+    
+    # make a call for plan and reasoning
+    response = client.responses.create(
+        model=model,
+        reasoning={"summary": "detailed"},
+        input=[
+            {
+                "role": "system",
+                "content": prompts.PLANNER_AG
+            },
+            {
+                "role": "user",
+                "content": f"{planner_prompt}\nUser Prompt: {state.prompt}"
+            }
+        ],
+    )
+    state.plan = json.loads(response.output[1].content[0].text)
+    state.reasoning = response.reasoning.summary
+    
+    similar_tasks = db.find_similar_tasks(state)
+    
+    planner_prompt = f"""
+    {prompts.PLANNER_AG}
+    
+    For the task, choose one of the following valid task types: {valid_tasks}.
+    
+    Training dataset insights:
+    {pretty_train_insights}
+    
+    Similar previously executed tasks from the database:
+    {json.dumps(similar_tasks, indent=2) if similar_tasks else "None"}
+    """
+    
+    return planner_prompt
 
 
 def create_preprocess_spec(state: State) -> str:
