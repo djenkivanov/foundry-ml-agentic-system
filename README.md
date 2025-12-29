@@ -36,3 +36,22 @@ FoundryML on the other hand does a *little bit* more behind the curtains:
 
 - ❌ (To be implemented) Self-learning is achievable through the DB of previous tasks. FoundryML will go through failed tasks, troubleshoot what went wrong, come up with a new plan and execute it, and record new findings. 
 
+
+## How to use locally
+
+Clone repo,make new Python venv, in this example it's named "foundryml". After activating venv, install requirements.
+```python
+>> python -m venv foundryml
+>> ./foundryml/Scripts/activate
+>> pip install -r requirements.txt
+```
+
+You'll need an OpenAI API key to make LLM calls. Create a file named `.env` in the root of the project and paste your key, example:
+```
+OPENAI_KEY="your_api_key"
+```
+
+Now, just run Streamlit, and give it a try!
+```python
+>> streamlit run app.py
+```
