@@ -32,7 +32,7 @@ FoundryML on the other hand does a *little bit* more behind the curtains:
 ## FoundryML provides the following features:
 - ✅ Full Machine Learning process from data inspection, to preprocessing and feature engineer, to training with different models and optimizing. 
 
-- ✅ History of previous tasks along with their traces and final status (eg. fail, success) inside a DB. ❌ (To be implemented) FoundryML can revisit these past tasks, compare current task, retrieve relevant useful information and apply in it in it's current task. 
+- ✅ History of previous tasks along with their traces and final status (eg. fail, success) inside a DB. FoundryML can revisit these past tasks, compare current task, retrieve relevant useful information and apply in it in it's current task. 
 
 - ❌ (To be implemented) Self-learning is achievable through the DB of previous tasks. FoundryML will go through failed tasks, troubleshoot what went wrong, come up with a new plan and execute it, and record new findings. 
 
